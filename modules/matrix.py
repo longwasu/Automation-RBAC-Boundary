@@ -1,8 +1,9 @@
 import json
 
-def load_matrix(session=None):
-    with open('matrix.sample.json', 'r', encoding='utf-8') as f:
-        return json.load(f)
+def load_matrix(session):
+    if session == None:
+        with open('../matrix.sample.json', 'r', encoding='utf-8') as f:
+            return json.load(f)
 
 def expected_allow(matrix, roles, group, method, action=None):
     admin_role = matrix.get("adminRole", "all_access")
@@ -19,14 +20,14 @@ def expected_allow(matrix, roles, group, method, action=None):
             return True
             
         if action == 'delete':
-            allowed_delete_roles = matrix.get("ar", {}).get("taskDeleteRoles", []) #
+            allowed_delete_roles = matrix.get("ar", {}).get("taskDeleteRoles", [])
             return any(role in allowed_delete_roles for role in roles)
             
         action_risk = matrix.get("ar", {}).get("actionRisk", {}).get(action)
         
         if action_risk:
             for role in roles:
-                allowed_risks = matrix.get("ar", {}).get("roleRisk", {}).get(role, []) #[cite: 2]
+                allowed_risks = matrix.get("ar", {}).get("roleRisk", {}).get(role, [])
                 if action_risk in allowed_risks:
                     return True
                     
@@ -47,19 +48,50 @@ def expected_allow(matrix, roles, group, method, action=None):
 if __name__ == "__main__":
     matrix_data = load_matrix()
     
-    print("--- Test nhóm thông thường ---")
-    print("Test 1 (Viewer ghi agents - Kỳ vọng False):", expected_allow(matrix_data, ["nst_soc_viewer"], "agents", "POST"))
-    print("Test 2 (Manager ghi agents - Kỳ vọng True):", expected_allow(matrix_data, ["nst_soc_manager"], "agents", "POST"))
-    
-    print("\n--- Test nhóm Active Response ---")
-    # Test 3: Viewer chạy lệnh ping (rủi ro 'read') -> Được phép[cite: 2]
-    print("Test 3 (Viewer chạy ping - Kỳ vọng True):", expected_allow(matrix_data, ["nst_soc_viewer"], "ar-command", "POST", action="ping"))
-    
-    # Test 4: Viewer chạy lệnh isolate (rủi ro 'high') -> Bị chặn[cite: 2]
-    print("Test 4 (Viewer chạy isolate - Kỳ vọng False):", expected_allow(matrix_data, ["nst_soc_viewer"], "ar-command", "POST", action="isolate"))
-    
-    # Test 5: Analyst chạy lệnh isolate (rủi ro 'high') -> Được phép[cite: 2]
-    print("Test 5 (Analyst chạy isolate - Kỳ vọng True):", expected_allow(matrix_data, ["nst_soc_analyst"], "ar-command", "POST", action="isolate"))
-    
-    # Test 6: Analyst chạy lệnh run-command (rủi ro 'exec') -> Bị chặn (Chỉ admin mới được)[cite: 2]
-    print("Test 6 (Analyst chạy run-command - Kỳ vọng False):", expected_allow(matrix_data, ["nst_soc_analyst"], "ar-command", "POST", action="run-command"))
+    # Danh sách 15 kịch bản để bao phủ toàn bộ các góc ngách của ma trận quyền[cite: 1, 2]
+    # Cấu trúc: (roles, group, method, action, expected_result, mô_tả)
+    test_cases = [
+        # 1. Admin bypass toàn bộ
+        (["all_access"], "rbac", "POST", None, True, "Admin ghi rbac (Bypass)"),
+        
+        # 2. Quyền mặc định (Baseline)
+        (["nst_threat_hunting_ro"], "health", "GET", None, True, "Hunter đọc health (từ baseline)"),
+        (["nst_compliance_auditor"], "self", "POST", None, True, "Auditor ghi self (từ baseline)"),
+        
+        # 3. Quyền mở rộng (Caps) thông thường
+        (["nst_soc_viewer"], "agents", "GET", None, True, "Viewer đọc agents"),
+        (["nst_soc_viewer"], "agents", "POST", None, False, "Viewer ghi agents (Chặn)"),
+        (["nst_soc_manager"], "agents", "POST", None, True, "Manager ghi agents"),
+        (["nst_compliance_auditor"], "agents", "GET", None, False, "Auditor đọc agents (Không có trong caps)"),
+        
+        # 4. Quyền trên Active Response (ar-command)
+        (["nst_soc_viewer"], "ar-command", "GET", None, True, "Viewer xem danh sách AR"),
+        (["nst_soc_viewer"], "ar-command", "POST", "ping", True, "Viewer chạy ping (rủi ro read)"),
+        (["nst_soc_viewer"], "ar-command", "POST", "isolate", False, "Viewer chạy isolate (Chặn do rủi ro high)"),
+        (["nst_soc_analyst"], "ar-command", "POST", "isolate", True, "Analyst chạy isolate (rủi ro high)"),
+        
+        # 5. Quyền xóa task AR (taskDeleteRoles)
+        (["nst_soc_analyst"], "ar-command", "DELETE", "delete", False, "Analyst xóa task AR (Chặn)"),
+        (["nst_soc_manager"], "ar-command", "DELETE", "delete", True, "Manager xóa task AR"),
+        
+        # 6. Quyền RCE (Run-command)
+        (["nst_soc_manager"], "ar-command", "POST", "run-command", False, "Manager chạy RCE (Chặn do rủi ro exec)"),
+        (["all_access"], "ar-command", "POST", "run-command", True, "Admin chạy RCE (Bypass)"),
+    ]
+
+    print(f"{'KẾT QUẢ':<10} | {'MÔ TẢ KỊCH BẢN'}")
+    print("-" * 65)
+
+    passed_count = 0
+    for roles, group, method, action, expected, desc in test_cases:
+        actual = expected_allow(matrix_data, roles, group, method, action)
+        if actual == expected:
+            status = "PASS"
+            passed_count += 1
+        else:
+            status = f"FAIL"
+            
+        print(f"{status:<10} | {desc}")
+        
+    print("-" * 65)
+    print(f"Tổng kết: Đạt {passed_count}/{len(test_cases)} kịch bản kiểm thử.")
