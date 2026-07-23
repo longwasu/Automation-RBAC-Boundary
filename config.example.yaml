@@ -1,0 +1,23 @@
+system:
+  base_url: https://edr-dev.nstgroup.vn
+
+test_users:
+  - username: "demo_soc_manager"
+    password: "PASSWORD HERE"
+    role: "nst_soc_manager"
+
+  - username: "demo_soc_analyst"
+    password: "PASSWORD HERE"
+    role: "nst_soc_analyst"
+
+  - username: "demo_soc_viewer"
+    password: "PASSWORD HERE"
+    role: "nst_soc_viewer"
+
+  - username: "demo_compliance_auditor"
+    password: "PASSWORD HERE"
+    role: "nst_compliance_auditor"
+
+  - username: "demo_threat_hunting_ro"
+    password: "PASSWORD HERE"
+    role: "nst_threat_hunting_ro"
