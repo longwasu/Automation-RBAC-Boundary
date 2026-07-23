@@ -2,12 +2,14 @@
 Tự kiểm:  python -m modules.auth --selftest --config modules/config.yaml
 """
 from __future__ import annotations
-
 import os
 import sys
 from typing import List
 import requests
+import yaml
+
 _shapes = None
+
 def shapes():
     global _shapes
     if _shapes is None:
@@ -48,21 +50,18 @@ TIMEOUT = 15
 class AuthError(RuntimeError):
     """Không dựng được một phiên dùng được."""
 
-
 def _warn(msg):
     print(f"[auth] {msg}", file=sys.stderr)
 
 
 def _unwrap(data):
     return data.get("data", data) if isinstance(data, dict) else data
-
-
 def _new_http(base, verify_tls):
     http = requests.Session()
     http.verify = verify_tls
     http.headers.update(BROWSER_HEADERS)
-    http.headers["Origin"] = base
-    http.headers["Referer"] = f"{base}/"
+    http.headers["Origin"] = base           # same-origin: chỉ biết khi có base,
+    http.headers["Referer"] = f"{base}/"    # nên đặt ở đây chứ không ở hằng số
     http.base_url = base
     if not verify_tls:
         try:
@@ -106,6 +105,7 @@ def login(base_url, username, password, verify_tls=False, roles=None) :
 
 
 def get_manager_host_id(session) -> str:
+
     http = session.session
     base = getattr(http, "base_url", "")
     if not base:
@@ -124,6 +124,7 @@ def get_manager_host_id(session) -> str:
 
 
 def fetch_nst_token(session, api_id, force=False):
+    """Bước 3. Mint token cho manager API. Trả None kèm cảnh báo khi hỏng."""
     http = session.session
     base = getattr(http, "base_url", "")
     try:
@@ -165,45 +166,46 @@ def prepare_session(session, api_id, force=False):
     session.session.api_id = api_id
     return fetch_nst_token(session, api_id, force)
 
-
 def login_all_users(config_path: str) -> List:
-    from modules.common.config import load_config
-    cfg = load_config(_resolve_config(config_path))
-    users = cfg.users_low_to_high()
+    base_url, verify_tls, users = _read_config(config_path)
     if not users:
         print(f"[ERR] {config_path}: không có tài khoản nào trong mục users")
         return []
-
     sessions = []
     api_id = None
-
     for user in users:
         try:
-            s = login(cfg.base_url, user.username, user.password, cfg.verify_tls)
+            s = login(base_url, user["username"], user["password"], verify_tls)
         except AuthError as e:
             print(f"[ERR] {e}")
             continue
 
-        if api_id is None:
+        if api_id is None:                  # lấy một lần, ở tài khoản đầu tiên vào được
             try:
                 api_id = get_manager_host_id(s)
             except AuthError as e:
-                print(f"[ERR] {user.username}: không đọc được api id: {e}")
+                print(f'[ERR] {user["username"]}: không đọc được api id: {e}')
                 continue
         else:
             set_nst_cookies(s.session, api_id=api_id)
             s.session.api_id = api_id
 
         if fetch_nst_token(s, api_id) is None:
-            print(f"[ERR] {user.username}: không có nst-token, /api/request sẽ trả 401")
+            print(f'[ERR] {user["username"]}: không có nst-token, /api/request sẽ trả 401')
 
-        print(f"[OK]  {user.username:24} id={api_id}")
-        print(f"      config={list(user.roles or [])} server={s.roles or '(không lấy được)'}")
+        print(f"[OK]  {user["username"]:24} id={api_id}")
+        print(f"      config={user["roles"]} server={s.roles or '(không lấy được)'}")
         sessions.append(s)
-
     return sessions
 
-
+def _read_config(path: str):
+    with open(_resolve_config(path), "r", encoding="utf-8") as f:
+        raw = yaml.safe_load(f) or {}
+    users = [{"username": u["username"],
+              "password": u.get("password", ""),
+              "roles": list(u.get("roles", []))}
+             for u in raw.get("users", [])]
+    return raw["base_url"], bool(raw.get("verify_tls", False)), users
 def _resolve_config(path: str) -> str:
     if os.path.exists(path):
         return path
@@ -211,9 +213,7 @@ def _resolve_config(path: str) -> str:
     candidate = os.path.join(here, os.path.basename(path))
     if os.path.exists(candidate):
         return candidate
-    return path                                     # để open() báo lỗi gốc
-
-
+    return path
 def _fetch_roles(http, base):
     try:
         r = http.get(f"{base}{AUTHINFO_PATH}", timeout=TIMEOUT)
@@ -225,8 +225,6 @@ def _fetch_roles(http, base):
     if not roles:
         _warn(f"{AUTHINFO_PATH} không trả về roles nào")
     return roles
-
-
 def _extract_roles(data):
     node = _unwrap(data)
     if isinstance(node, dict):
@@ -235,8 +233,6 @@ def _extract_roles(data):
             if isinstance(value, list) and value:
                 return [str(v) for v in value]
     return []
-
-
 def _extract_api_id(data):
     node = _unwrap(data)
     if isinstance(node, list):                       # [{"id": "manager-nst", ...}]
@@ -244,8 +240,6 @@ def _extract_api_id(data):
     if isinstance(node, dict) and node.get("id"):
         return str(node["id"])
     return ""
-
-
 def _extract_token(resp):
     try:
         node = _unwrap(resp.json())
@@ -257,8 +251,6 @@ def _extract_token(resp):
             if isinstance(value, str) and value:
                 return value
     return None
-
-
 def _selftest(config_path):
     sessions = login_all_users(config_path)
     if not sessions:
