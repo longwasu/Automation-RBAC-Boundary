@@ -201,11 +201,12 @@ def login_all_users(config_path: str) -> List:
 def _read_config(path: str):
     with open(_resolve_config(path), "r", encoding="utf-8") as f:
         raw = yaml.safe_load(f) or {}
+    system = raw.get("system") or {}
     users = [{"username": u["username"],
               "password": u.get("password", ""),
-              "roles": list(u.get("roles", []))}
-             for u in raw.get("users", [])]
-    return raw["base_url"], bool(raw.get("verify_tls", False)), users
+              "roles": [u["role"]] if u.get("role") else []}
+             for u in raw.get("test_users", [])]
+    return system["base_url"], bool(system.get("verify_tls", False)), users
 def _resolve_config(path: str) -> str:
     if os.path.exists(path):
         return path
