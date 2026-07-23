@@ -1,28 +1,31 @@
-"""task-B — authentication & session.
-
-Three steps; the order is forced because each one needs the previous:
-    POST /auth/login  {username, password}   -> security_authentication + nst-user
-    GET  /hosts/apis                         -> api id                  -> nst-api
-    POST /api/login   {idHost, force:false}  -> nst-token
-
-Public API:
-    login(base_url, username, password, verify_tls=False, roles=None) -> Session
-    get_manager_host_id(session) -> str
-    prepare_session(session, api_id) -> str | None
-
-Self-test:  python -m modules.auth --selftest --config config.yaml
-"""
 from __future__ import annotations
 import os
 import sys
 import requests
 from common.types import Session
-
+# import logging, http.client as h
+# h.HTTPConnection.debuglevel = 1
+# logging.basicConfig(level=logging.DEBUG)
 LOGIN_PATH = "/auth/login"
 HOSTS_APIS_PATH = "/hosts/apis"
 API_LOGIN_PATH = "/api/login"
 AUTHINFO_PATH = "/api/v1/auth/authinfo"
-XSRF_HEADER = {"osd-xsrf": "kibana"}
+BROWSER_HEADERS = {
+    "osd-xsrf": "kibana",
+    "User-Agent": ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                   "(KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36"),
+    "Accept": "application/json, text/plain, */*",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Content-Type": "application/json",
+    "Sec-Ch-Ua": '"Chromium";v="149", "Not)A;Brand";v="24"',
+    "Sec-Ch-Ua-Mobile": "?0",
+    "Sec-Ch-Ua-Platform": '"Windows"',
+    "Sec-Fetch-Site": "same-origin",
+    "Sec-Fetch-Mode": "cors",
+    "Sec-Fetch-Dest": "empty",
+    "Priority": "u=1, i",
+}
+
 SESSION_COOKIE = "security_authentication"
 NST_USER_COOKIE = "nst-user"
 NST_API_COOKIE = "nst-api"
@@ -32,20 +35,19 @@ TIMEOUT = 15
 
 class AuthError(RuntimeError):
     """Could not establish a usable session."""
-
 def _warn(msg):
     print(f"[auth] {msg}", file=sys.stderr)
-
 
 def _unwrap(data):
     """Many responses wrap the payload in {"data": {...}} — look inside if so."""
     return data.get("data", data) if isinstance(data, dict) else data
 
-
 def _new_http(base, verify_tls):
     http = requests.Session()
     http.verify = verify_tls
-    http.headers.update(XSRF_HEADER)
+    http.headers.update(BROWSER_HEADERS)
+    http.headers["Origin"] = base
+    http.headers["Referer"] = f"{base}/"
     http.base_url = base
     if not verify_tls:
         try:
@@ -54,7 +56,6 @@ def _new_http(base, verify_tls):
         except Exception:
             pass
     return http
-
 
 def set_nst_cookies(http, username=None, api_id=None, token=None):
     """Attach the NST cookies that do not arrive via Set-Cookie."""
@@ -65,11 +66,10 @@ def set_nst_cookies(http, username=None, api_id=None, token=None):
     if token:
         http.cookies.set(NST_TOKEN_COOKIE, token)
 
-
 def login(base_url, username, password, verify_tls=False, roles=None) -> Session:
+    """Step 1. Raises AuthError on anything that is not a usable session."""
     base = base_url.rstrip("/")
     http = _new_http(base, verify_tls)
-
     try:
         resp = http.post(f"{base}{LOGIN_PATH}",
                          json={"username": username, "password": password},
@@ -105,7 +105,6 @@ def get_manager_host_id(session: Session) -> str:
     set_nst_cookies(http, api_id=api_id)
     return api_id
 
-
 def fetch_nst_token(session: Session, api_id, force=False):
     http = session.http
     base = getattr(http, "base_url", "")
@@ -124,7 +123,6 @@ def fetch_nst_token(session: Session, api_id, force=False):
     set_nst_cookies(http, token=token)
     return token
 
-
 def prepare_session(session: Session, api_id, force=False):
     set_nst_cookies(session.http, api_id=api_id)
     return fetch_nst_token(session, api_id, force)
@@ -142,7 +140,6 @@ def _fetch_roles(http, base):
         _warn(f"{AUTHINFO_PATH} returned no roles")
     return roles
 
-
 def _extract_roles(data):
     node = _unwrap(data)
     if isinstance(node, dict):
@@ -152,15 +149,13 @@ def _extract_roles(data):
                 return [str(v) for v in value]
     return []
 
-
 def _extract_api_id(data):
     node = _unwrap(data)
-    if isinstance(node, list):                       # [{"id": "manager-nst", ...}]
+    if isinstance(node, list):
         node = node[0] if node else None
     if isinstance(node, dict) and node.get("id"):
         return str(node["id"])
     return ""
-
 
 def _extract_token(resp):
     try:
@@ -173,8 +168,6 @@ def _extract_token(resp):
             if isinstance(value, str) and value:
                 return value
     return None
-
-
 def _selftest(config_path):
     from common.config import load_config
     cfg = load_config(config_path)
@@ -182,18 +175,17 @@ def _selftest(config_path):
 
     for u in cfg.users_low_to_high():
         try:
-            s = login(cfg.base_url, u.username, u.password, cfg.verify_tls)
+            s = login(cfg.base_url, u.username, u.password, cfg.verify_tls)  # ask the server
             api_id = get_manager_host_id(s)
             token = prepare_session(s, api_id)
         except AuthError as e:
             ok = False
             print(f"[ERR] {e}")
             continue
-        print(f"[OK]  {u.username:24} id={api_id}")
+        print(f"[OK]  {u.username:24} id={api_id} token={'yes' if token else 'NO'}")
         print(f"      config={list(u.roles or [])} server={s.roles or '(unresolved)'}")
 
     return 0 if ok else 1
-
 
 if __name__ == "__main__":
     import argparse
