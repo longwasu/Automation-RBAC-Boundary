@@ -45,29 +45,34 @@ def expected_allow(matrix: Matrix, role: str, group: str, method: str, action=No
 
 def load_matrix(session = None):
     if session == None:
-        with open('../matrix.sample.json', 'r', encoding='utf-8') as f:
+        with open('matrix.sample.json', 'r', encoding='utf-8') as f:
+            print("Da load file sample 1")
             return Matrix(json.load(f))
     else:
-        file_path = '../matrix.json'
+        file_path = 'matrix.json'
         
         if os.path.exists(file_path):
             with open(file_path, 'r', encoding='utf-8') as f:
+                print("Da load file json 2")
                 return Matrix(json.load(f))
         
         else:
             try:
                 api_url = "https://edr-dev.nstgroup.vn/api/role-tiers/matrix"
-                response = session.get(api_url, timeout = 10)
+                response = session.session.get(api_url, timeout = 10)
                             
                 if response.status_code == 200:
+                    print("Da ket noi den server")
                     matrix_data = response.json()
                             
                 with open(file_path, 'w', encoding='utf-8') as f:
                     json.dump(matrix_data, f, ensure_ascii=False, indent=4)
-                                    
+                    print("Da tao file json")
+
+                print("Da load file json 3")                    
                 return Matrix(matrix_data)
             
-            except requests.exceptions:
+            except requests.exceptions.RequestException as e:
                 print("Connection Error: khong tai duoc file Matrix.json")
 
 if __name__ == "__main__":
