@@ -4,3 +4,4 @@ config.yaml
 venv/
 .env
 rbac-test-results.xml
+matrix.json
