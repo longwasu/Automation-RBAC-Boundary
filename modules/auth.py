@@ -7,6 +7,7 @@ import yaml
 
 _shapes = None
 def shapes():
+    """Load module rbac_matrix theo kiểu lazy (chỉ load khi cần) để tránh lỗi vòng lặp import (circular import)."""
     global _shapes
     if _shapes is None:
         import rbac_matrix
@@ -37,9 +38,9 @@ class AuthError(RuntimeError):
 def _warn(msg):
     print(f"[auth] {msg}", file=sys.stderr)
 
-
 def _unwrap(data):
     return data.get("data", data) if isinstance(data, dict) else data
+
 def _new_http(base, verify_tls):
     http = requests.Session()
     http.verify = verify_tls
@@ -54,6 +55,7 @@ def _new_http(base, verify_tls):
         except Exception:
             pass
     return http
+
 
 def set_nst_cookies(http, username=None, api_id=None, token=None):
     if username:
@@ -85,6 +87,7 @@ def login(base_url, username, password, verify_tls=False, roles=None) :
     return shapes().Session(session=http, username=username,
                             roles=roles if roles is not None else _fetch_roles(http, base))
 
+
 def get_manager_host_id(session) -> str:
     http = session.session
     base = getattr(http, "base_url", "")
@@ -101,6 +104,7 @@ def get_manager_host_id(session) -> str:
     set_nst_cookies(http, api_id=api_id)
     http.api_id = api_id                # task-D đọc lại từ đây
     return api_id
+
 
 def fetch_nst_token(session, api_id, force=False):
     http = session.session
@@ -137,6 +141,7 @@ def _describe_body(resp):
         return shape
     return f"body là {type(data).__name__}"
 
+
 def login_all_users(config_path: str) -> List:
     base_url, verify_tls, users = _read_config(config_path)
     if not users:
@@ -151,7 +156,7 @@ def login_all_users(config_path: str) -> List:
             print(f"[ERR] {e}")
             continue
 
-        if api_id is None:                  # lấy một lần, ở tài khoản đầu tiên vào được
+        if api_id is None:
             try:
                 api_id = get_manager_host_id(s)
             except AuthError as e:
@@ -169,6 +174,7 @@ def login_all_users(config_path: str) -> List:
         sessions.append(s)
     return sessions
 
+
 def _read_config(path: str):
     with open(_resolve_config(path), "r", encoding="utf-8") as f:
         raw = yaml.safe_load(f) or {}
@@ -178,6 +184,8 @@ def _read_config(path: str):
               "roles": [u["role"]] if u.get("role") else []}
              for u in raw.get("test_users", [])]
     return system["base_url"], bool(system.get("verify_tls", False)), users
+
+
 def _resolve_config(path: str) -> str:
     if os.path.exists(path):
         return path
@@ -186,6 +194,8 @@ def _resolve_config(path: str) -> str:
     if os.path.exists(candidate):
         return candidate
     return path
+
+
 def _fetch_roles(http, base):
     try:
         r = http.get(f"{base}{AUTHINFO_PATH}", timeout=TIMEOUT)
@@ -197,6 +207,8 @@ def _fetch_roles(http, base):
     if not roles:
         _warn(f"{AUTHINFO_PATH} không trả về roles nào")
     return roles
+
+
 def _extract_roles(data):
     node = _unwrap(data)
     if isinstance(node, dict):
@@ -205,6 +217,8 @@ def _extract_roles(data):
             if isinstance(value, list) and value:
                 return [str(v) for v in value]
     return []
+
+
 def _extract_api_id(data):
     node = _unwrap(data)
     if isinstance(node, list):
@@ -212,6 +226,8 @@ def _extract_api_id(data):
     if isinstance(node, dict) and node.get("id"):
         return str(node["id"])
     return ""
+
+
 def _extract_token(resp):
     try:
         node = _unwrap(resp.json())
