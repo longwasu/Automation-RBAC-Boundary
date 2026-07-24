@@ -78,9 +78,6 @@ def main():
     if (sys.version_info < (3, 12)):
         print("Yêu cầu Python từ 3.12 trở lên!")
         sys.exit(1)
-
-    print("[*] Đang khởi tạo kịch bản test...")
-    test_cases: List[Probe] = probe.generate_test_cases()
     
     print("[*] Đang thực hiện đăng nhập các tài khoản giả lập...")
     active_sessions: List[Session] = auth.login_all_users("config.yaml")
@@ -88,8 +85,9 @@ def main():
         print("[!] Không có phiên đăng nhập nào hợp lệ. Dừng chương trình.")
         sys.exit(1)
 
-    for session in active_sessions:
-        matrix_data = matrix.load_matrix(session)
+    matrix_data = matrix.load_matrix(active_sessions[0])
+    print("[*] Đang khởi tạo kịch bản test...")
+    test_cases: List[Probe] = probe.generate_test_cases(matrix_data)
     
     all_results: List[ProbeResult] = []
     for session in active_sessions:
