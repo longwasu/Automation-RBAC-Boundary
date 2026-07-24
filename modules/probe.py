@@ -102,7 +102,6 @@ def build_probes(matrix) -> List:
                     probes.append(Probe(group, verb, path, {}))
     return probes
 
-
 def _group_paths(group, paths):
     """Trích xuất mọi đường dẫn trong matrix liệt kê cho nhóm, chuyển thành chúng thành dạng gọi được."""
     if group == "rbac":
