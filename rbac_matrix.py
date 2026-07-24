@@ -85,6 +85,9 @@ def main():
     if not active_sessions:
         print("[!] Không có phiên đăng nhập nào hợp lệ. Dừng chương trình.")
         sys.exit(1)
+
+    for session in active_sessions:
+        matrix_data = matrix.load_matrix(session)
     
     all_results: List[ProbeResult] = []
     for session in active_sessions:
