@@ -1,8 +1,4 @@
 from __future__ import annotations
-
-import copy
-import json
-import os
 import re
 from typing import List, Optional
 
@@ -32,7 +28,7 @@ WRITE_VERB = {
     "active-response": "PUT",
     "rbac": "POST",
     "groups": "POST",
-    "agent-files": "POST",
+    "agent-files": "DELETE",
     "agent-inventory": "PUT",
     "manager-admin": "PUT",
     "tasks": "DELETE",
@@ -42,27 +38,15 @@ WRITE_VERB = {
 }
 DEFAULT_WRITE_VERB = "POST"
 
-LIST_PARAMS = {"offset": 0, "limit": 10}
 READ_BODY_PATH = {
     "/agents": {"params": {"q": "id!=000", "offset": 0, "limit": 10, "sort": "+id"}},
     "/rules": {"params": {"offset": 0, "limit": 10, "sort": "+id"}},
     "/decoders": {"params": {"offset": 0, "limit": 10, "sort": "+filename"}},
 }
-PAGINATED_GROUPS = {"agent-inventory", "agent-files", "groups", "tasks", "rbac", "ruleset"}
-NO_WRITE_PROBE = {"/security/user/authenticate"}
-EXTRA_PROBES = {
-    "self": [
-        ("GET", "/security/users/me/policies", {"idHost": HOST_ID_TOKEN}),
-    ],
-}
 
 RISK_ORDER = ["read", "change", "high", "exec"]
 AR_PREFERRED = {"read": "ping", "change": "unisolate", "high": "isolate", "exec": "run-command"}
-
 DENY_STATUS = 403
-
-class ProbeError(RuntimeError):
-    """Không lấy được mã trạng thái thật (lỗi truyền tải / thiếu base_url)."""
 
 def generate_test_cases(matrix) -> List:
     """
@@ -82,8 +66,8 @@ def generate_test_cases(matrix) -> List:
         else:
             verb = WRITE_VERB.get(group, DEFAULT_WRITE_VERB)
             for path in paths:
-                probes.append(Probe(group, "GET", path, _read_body(group, path)))
-                if verb and path not in NO_WRITE_PROBE:
+                probes.append(Probe(group, "GET", path, {}))
+                if verb:
                     probes.append(Probe(group, verb, path, {}))
     return probes
 
@@ -101,14 +85,6 @@ def _group_paths(group, paths):
         out.append(path)
     return out or [f"/{group}"]
 
-
-def _read_body(group, path):
-    """Body mặc định cho phép thử đọc (tham số phân trang nếu có)."""
-    if path in READ_BODY_PATH:
-        return copy.deepcopy(READ_BODY_PATH[path])
-    if group in PAGINATED_GROUPS:
-        return {"params": dict(LIST_PARAMS)}
-    return {}
 
 def _ar_probes(paths, ar):
     """Probe cho ar-command: đọc mọi path, ghi trên path xoá task, dispatch theo mức rủi ro."""
@@ -136,7 +112,7 @@ def _ar_probes(paths, ar):
 
 def build_payload(host_id: str, probe) -> dict:
     """
-    Đóng gói request body gửi đến API proxy. Quét và thay thế các biến giữ chỗ (như host_id) bằng dữ liệu thật."""
+    Đóng gói request body gửi đến API proxy. Quét và thay thế các biến giữ chỗ bằng dữ liệu thật."""
     return {"method": probe.method,
             "path": probe.path,
             "body": _resolve_tokens(probe.body or {}, host_id),
@@ -162,12 +138,12 @@ def run_probe(session, host_id: str, probe) -> int:
     http = session.session
     base = getattr(http, "base_url", "")
     if not base:
-        raise ProbeError("session has no base_url (task-B must set http.base_url)")
+        raise RuntimeError("session has no base_url (task-B must set http.base_url)")
     try:
         r = http.post(f"{base}{REQUEST_PATH}",
                       json=build_payload(host_id, probe), timeout=TIMEOUT)
     except Exception as e:
-        raise ProbeError(f"{probe.method} {probe.path}: transport error: {e}")
+        print(f"{probe.method} {probe.path}: transport error: {e}")
     return r.status_code
 
 
@@ -176,18 +152,13 @@ def execute_probes(session, matrix_data, test_cases) -> List:
     matrix_expected/invariant_verdict/ok để None cho task-C/task-E điền."""
     host_id = getattr(session.session, "api_id", None)
     if not host_id:
-        raise ProbeError("session không có api_id")
+        raise RuntimeError("session không có api_id")
 
     ProbeResult = shapes().ProbeResult
     results = []
 
     for probe in test_cases:
-        try:
-            status = run_probe(session, host_id, probe)
-        except ProbeError as e:
-            print(f"ProbeError: {e}")
-            continue
-
+        status = run_probe(session, host_id, probe)
         results.append(ProbeResult(
             username=session.username,
             roles=session.roles,
@@ -195,7 +166,7 @@ def execute_probes(session, matrix_data, test_cases) -> List:
             method=probe.method,
             path=probe.path,
             status=status,
-            actual_allow=None,
+            actual_allow=(status != 403),
             matrix_expected=None,
             invariant_verdict=None,
             ok=None,

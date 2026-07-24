@@ -1,6 +1,5 @@
 from __future__ import annotations
 import os
-import sys
 from typing import List
 import requests
 import yaml
@@ -18,9 +17,8 @@ LOGIN_PATH = "/auth/login"
 HOSTS_APIS_PATH = "/hosts/apis"
 API_LOGIN_PATH = "/api/login"
 AUTHINFO_PATH = "/api/v1/auth/authinfo"
-CHROME_VERSION = "149"
 BROWSER_HEADERS = {
-    "osd-xsrf": "kibana", #cân nhắc đổi thành true
+    "osd-xsrf": "true",
     "Accept": "application/json, text/plain, */*",
     "Content-Type": "application/json",
 }
@@ -28,7 +26,6 @@ SESSION_COOKIE = "security_authentication"
 NST_USER_COOKIE = "nst-user"
 NST_API_COOKIE = "nst-api"
 NST_TOKEN_COOKIE = "nst-token"
-TOKEN_KEYS = ("nst_token", "nstToken", "token", "jwt", "access_token")
 TIMEOUT = 15
 
 
@@ -91,16 +88,13 @@ def get_manager_host_id(session) -> str:
     """Gọi API lấy mã định danh của tài khoản từ máy chủ hệ thống."""
     http = session.session
     base = getattr(http, "base_url", "")
-    if not base:
-        raise AuthError("session has no base_url (login must set http.base_url)")
+    
     try:
         r = http.get(f"{base}{HOSTS_APIS_PATH}", timeout=TIMEOUT)
         r.raise_for_status()
         api_id = _extract_api_id(r.json())
     except (requests.RequestException, ValueError) as e:
         raise AuthError(f"{HOSTS_APIS_PATH} failed: {e}") from e
-    if not api_id:
-        raise AuthError(f"{HOSTS_APIS_PATH} returned no api id")
     set_nst_cookies(http, api_id=api_id)
     http.api_id = api_id
     return api_id
@@ -115,16 +109,17 @@ def fetch_nst_token(session, api_id, force=False):
                       json={"idHost": api_id, "force": bool(force)}, timeout=TIMEOUT)
         r.raise_for_status()
     except requests.RequestException as e:
+        print("[ERR] fetch nst-token xảy ra lỗi: {e}")
         return None
 
-    token = http.cookies.get(NST_TOKEN_COOKIE) or _extract_token(r)
+    token = http.cookies.get(NST_TOKEN_COOKIE)
     if not token:
         return None
     set_nst_cookies(http, token=token)
     return token
 
 def login_all_users(config_path: str) -> List:
-    """Đọc cấu hình và chạy luồng đăng nhập 3 bước cho toàn bộ tài khoản, in kết quả kiểm tra."""
+    """Đọc cấu hình và chạy luồng đăng nhập cho toàn bộ tài khoản, in kết quả kiểm tra."""
     base_url, verify_tls, users = _read_config(config_path)
     if not users:
         print(f"[ERR] {config_path}: không có tài khoản nào trong mục users")
@@ -174,15 +169,9 @@ def _read_config(path: str):
         verify_tls = bool(system.get("verify_tls", False))
         return base_url, verify_tls, users
     
-    except FileNotFoundError:
-        raise FileNotFoundError(f"Lỗi: Không thể tìm thấy file cấu hình tại: {config_path}")
-    except yaml.YAMLError as exc:
-        raise ValueError(f"Lỗi cú pháp YAML trong file config:\n{exc}")
-    except KeyError as exc:
-        raise ValueError(f"Lỗi cấu trúc config: Thiếu trường dữ liệu bắt buộc {exc}")
-    except TypeError as exc:
-        raise ValueError(f"Lỗi kiểu dữ liệu trong config. Vui lòng kiểm tra lại cấu trúc: {exc}")
-
+    except Exception as e:
+        raise AuthError(f"Lỗi đọc file config: {e}")
+        
 def _resolve_config(path: str) -> str:
     """Tìm kiếm và trả về đường dẫn tuyệt đối chính xác của file cấu hình nhằm hỗ trợ chạy script từ thư mục khác."""
     if os.path.exists(path):
@@ -199,21 +188,14 @@ def _fetch_roles(http, base):
     try:
         r = http.get(f"{base}{AUTHINFO_PATH}", timeout=TIMEOUT)
         r.raise_for_status()
-        roles = _extract_roles(r.json())
+        node = _unwrap(r.json())
+        if isinstance(node, dict):
+            for key in ("roles", "backend_roles"):
+                value = node.get(key)
+                if isinstance(value, list) and value:
+                    return [str(v) for v in value]
     except (requests.RequestException, ValueError) as e:
-        print(f"[ERR] {e}")
-        return []
-    return roles
-
-
-def _extract_roles(data):
-    """Trích xuất mảng quyền từ response payload (tìm ở cả 'roles' và 'backend_roles')."""
-    node = _unwrap(data)
-    if isinstance(node, dict):
-        for key in ("roles", "backend_roles"):
-            value = node.get(key)
-            if isinstance(value, list) and value:
-                return [str(v) for v in value]
+        print(f"[ERR] Lỗi lấy role: {e}")
     return []
 
 
@@ -225,18 +207,3 @@ def _extract_api_id(data):
     if isinstance(node, dict) and node.get("id"):
         return str(node["id"])
     return ""
-
-
-def _extract_token(resp):
-    """Quét JSON body để tìm token truy cập theo danh sách các từ khóa phổ biến (TOKEN_KEYS)."""
-    try:
-        node = _unwrap(resp.json())
-    except ValueError as e:
-        print(f"ValueError: {e}")
-        return None
-    if isinstance(node, dict):
-        for key in TOKEN_KEYS:
-            value = node.get(key)
-            if isinstance(value, str) and value:
-                return value
-    return None
