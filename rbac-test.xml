@@ -4,7 +4,12 @@
         <testcase classname="User Management" name="admin_sys DELETE /api/users/10" />
         <testcase classname="User Management" name="guest_01 DELETE /api/users/10" />
         <testcase classname="Finance" name="staff_sale GET /api/salary" />
-        <testcase classname="Audit" name="admin_sys DELETE /api/audit_logs" />
+        <testcase classname="Audit" name="admin_sys DELETE /api/audit_logs">
+            <failure message="Oracle Invariant Violation" type="SecurityOracleError">
+Ma trận yêu cầu: True
+Hệ thống trả về: True
+</failure>
+        </testcase>
         <testcase classname="Profile" name="staff_sale PUT /api/profile/me" />
     </testsuite>
 </testsuites>

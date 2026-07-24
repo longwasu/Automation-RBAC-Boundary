@@ -74,7 +74,19 @@ def write_junit(results: List[ProbeResult], path: str):
 
         if not r.ok:
             if r.invariant_verdict:
-                ET.SubElement(testcase, "failure", )
+                ET.SubElement(
+                    testcase, 
+                    "failure", 
+                    message="Oracle Invariant Violation", 
+                    type="SecurityOracleError"
+                ).text = f"\nMa trận yêu cầu: {r.matrix_expected}\nHệ thống trả về: {r.actual_allow}\n"
+            else:
+                ET.SubElement(
+                    testcase, 
+                    "failure", 
+                    message="Oracle Invariant Violation", 
+                    type="SecurityOracleError"
+                ).text = f"\nMa trận yêu cầu: {r.matrix_expected}\nHệ thống trả về: {r.actual_allow}\n"
     
 
     tree = ET.ElementTree(testsuites)
