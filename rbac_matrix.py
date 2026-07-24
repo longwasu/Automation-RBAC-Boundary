@@ -78,8 +78,11 @@ def main():
     if (sys.version_info < (3, 12)):
         print("Yêu cầu Python từ 3.12 trở lên!")
         sys.exit(1)
+<<<<<<< HEAD
 
     print("[*] Đang khởi tạo kịch bản test...")
+=======
+>>>>>>> main
     
     print("[*] Đang thực hiện đăng nhập các tài khoản giả lập...")
     active_sessions: List[Session] = auth.login_all_users("config.yaml")
@@ -88,8 +91,14 @@ def main():
         sys.exit(1)
 
     matrix_data = matrix.load_matrix(active_sessions[0])
+<<<<<<< HEAD
     test_cases: List[Probe] = probe.generate_test_cases(matrix_data)
 
+=======
+    print("[*] Đang khởi tạo kịch bản test...")
+    test_cases: List[Probe] = probe.generate_test_cases(matrix_data)
+    
+>>>>>>> main
     all_results: List[ProbeResult] = []
     for session in active_sessions:
         print(f"  -> Đang test với tài khoản: {session.username} ({session.roles})")
@@ -99,8 +108,8 @@ def main():
     print("\n[*] Đang tổng hợp báo cáo...")
     report.render_table(all_results)
     report.write_junit(all_results(), "rbac-test-results.xml")
-    
-    exit_code = 0 if all([r.ok for r in all_results()]) else 1
+
+    exit_code = 0 if all([r.ok for r in all_results]) else 1
     print(f"[*] Kết thúc kiểm thử. Exit code: {exit_code}")
     sys.exit(exit_code)
 
