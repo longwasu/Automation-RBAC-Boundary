@@ -4,4 +4,3 @@ config.yaml
 venv/
 .env
 rbac-test-results.xml
-rbac-test.xml

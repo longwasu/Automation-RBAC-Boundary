@@ -152,7 +152,7 @@ def main():
     # print(get_mock_results()[0].username);
     report.render_table(get_mock_results())
     # report.render_error_details(get_mock_results())
-    report.write_junit(get_mock_results(), "rbac-test=result.xml")
+    report.write_junit(get_mock_results(), "rbac-test=results.xml")
 
     exit_code = 0 if all([r.ok for r in get_mock_results()]) else 1
     sys.exit(exit_code)
