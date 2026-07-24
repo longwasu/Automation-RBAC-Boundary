@@ -6,8 +6,6 @@ import os
 import re
 from typing import List, Optional
 
-import requests
-
 _shapes = None
 
 
@@ -67,19 +65,7 @@ DENY_STATUS = 403
 class ProbeError(RuntimeError):
     """Không lấy được mã trạng thái thật (lỗi truyền tải / thiếu base_url)."""
 
-
-def generate_test_cases(matrix_path: Optional[str] = None) -> List:
-    """
-    Khởi tạo danh sách các test case từ file matrix JSON.
-    Đọc file matrix.sample.json (hoặc đường dẫn được truyền) và ném dữ liệu vào hàm build_probes().
-    """
-    fixture = matrix_path or os.path.join(
-        os.path.dirname(os.path.abspath(__file__)), "..", "matrix.sample.json")
-    with open(fixture, "r", encoding="utf-8") as f:
-        return build_probes(json.load(f))
-
-
-def build_probes(matrix) -> List:
+def generate_test_cases(matrix) -> List:
     """
     Chuyển đổi dữ liệu ma trận quyền (matrix) thành danh sách các kịch bản test (Probe).
     Duyệt qua từng group, sinh ra request GET. Nếu group cho phép ghi, sinh thêm request POST/PUT/DELETE. Gọi thêm xử lý riêng cho ar-command.
