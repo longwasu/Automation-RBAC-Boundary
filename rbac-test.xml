@@ -1,0 +1,10 @@
+<?xml version='1.0' encoding='utf-8'?>
+<testsuites>
+    <testsuite name="RBAC Matrix Tests" tests="5" failures="2">
+        <testcase classname="User Management" name="admin_sys DELETE /api/users/10" />
+        <testcase classname="User Management" name="guest_01 DELETE /api/users/10" />
+        <testcase classname="Finance" name="staff_sale GET /api/salary" />
+        <testcase classname="Audit" name="admin_sys DELETE /api/audit_logs" />
+        <testcase classname="Profile" name="staff_sale PUT /api/profile/me" />
+    </testsuite>
+</testsuites>

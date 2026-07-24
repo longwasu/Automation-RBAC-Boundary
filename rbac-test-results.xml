@@ -1,0 +1,15 @@
+<?xml version='1.0' encoding='utf-8'?>
+<testsuites>
+    <testsuite name="RBAC_Matrix_Evaluation" tests="5" failures="2" errors="0">
+        <testcase classname="User Management.DELETE" name="admin_sys accessing /api/users/10" />
+        <testcase classname="User Management.DELETE" name="guest_01 accessing /api/users/10" />
+        <testcase classname="Finance.GET" name="staff_sale accessing /api/salary">
+            <failure message="RBAC Matrix Mismatch" type="MatrixAssertionError">Ma trận yêu cầu (Expected): False
+Thực tế hệ thống trả về (Actual): True</failure>
+        </testcase>
+        <testcase classname="Audit.DELETE" name="admin_sys accessing /api/audit_logs">
+            <failure message="Oracle Invariant Violation" type="SecurityOracleError">Vi phạm luật cấm: FAIL: Xóa Audit Log</failure>
+        </testcase>
+        <testcase classname="Profile.PUT" name="staff_sale accessing /api/profile/me" />
+    </testsuite>
+</testsuites>

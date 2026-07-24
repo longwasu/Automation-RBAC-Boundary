@@ -127,9 +127,9 @@ def main():
     # matrix_data: Matrix = matrix.load_matrix("config.yaml") 
     
     # print("[*] Đang thực hiện đăng nhập các tài khoản giả lập...")
-    active_sessions: List[Session] = auth.login_all_users("config.yaml")
-    for session in active_sessions:
-        print(f"  -> Tài khoản '{session.username}' đăng nhập thành công với quyền: {session.roles}")
+    # active_sessions: List[Session] = auth.login_all_users("config.yaml")
+    # for session in active_sessions:
+    #     print(f"  -> Tài khoản '{session.username}' đăng nhập thành công với quyền: {session.roles}")
     # if not active_sessions:
     #     print("[!] Không có phiên đăng nhập nào hợp lệ. Dừng chương trình.")
     #     sys.exit(1)
@@ -138,14 +138,15 @@ def main():
     # for session in active_sessions:
     #     print(f"  -> Đang test với tài khoản: {session.username} ({session.roles})")
     #     results_for_user: List[ProbeResult] = probe.execute_probes(session, matrix_data, test_cases)
-    #     all_results.extend(results_for_user)
+    #     all_results.extend(results_for_user) # unpack list
 
     # print("\n[*] Đang tổng hợp báo cáo...")
     # report.render_table(all_results)
     # print("[*] Hoàn tất!")
     # print(get_mock_results()[0].username);
-    # report.render_table(get_mock_results())
+    report.render_table(get_mock_results())
     # report.render_error_details(get_mock_results())
+    report.write_junit(get_mock_results(), "rbac-test.xml")
 
 
 if __name__ == "__main__":
