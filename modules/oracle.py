@@ -34,25 +34,38 @@ def check_invariants(invariants_data, role, method, path):
 
     return None
 
-def reconcile(probe_result: ProbeResult):
-    errors = []
-    
+def reconcile(probe_result: ProbeResult) -> ProbeResult:
     actual = probe_result.actual_allow
     expected = probe_result.matrix_expected
     verdict = probe_result.invariant_verdict
+
+    probe_result.ok = True
+    
+    log_prefix = f"[{probe_result.method} {probe_result.path} | Role: {probe_result.roles}]"
     
     if verdict == "DENY":
-        
         if actual is True:
-            errors.append("Error: Verdict != Actual")
+            print(f"[!] FATAL ERROR {log_prefix}")
+            probe_result.ok = False
             
         if expected is True:
-            errors.append("Error: Verdict != Expected")
+            print(f"[!] CONFIG ERROR {log_prefix}")
+            probe_result.ok = False
+            
+    elif verdict == "ALLOW":
+        if actual is False:
+            print(f"[!] FATAL ERROR {log_prefix}")
+            probe_result.ok = False
+            
+        if expected is False:
+            print(f"[!] CONFIG ERROR {log_prefix}")
+            probe_result.ok = False
             
     if actual != expected:
-        errors.append("Error: Actual != Expected")
+        print(f"[!] LOGIC ERROR {log_prefix}")
+        probe_result.ok = False
         
-    return errors
+    return probe_result
 
 if __name__ == "__main__":
     invariants_data = load_invariants()
