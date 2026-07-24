@@ -1,6 +1,3 @@
-"""task-B — đăng nhập & phiên.
-Tự kiểm:  python -m modules.auth --selftest --config modules/config.yaml
-"""
 from __future__ import annotations
 import os
 import sys
@@ -9,7 +6,6 @@ import requests
 import yaml
 
 _shapes = None
-
 def shapes():
     global _shapes
     if _shapes is None:
@@ -23,29 +19,17 @@ API_LOGIN_PATH = "/api/login"
 AUTHINFO_PATH = "/api/v1/auth/authinfo"
 CHROME_VERSION = "149"
 BROWSER_HEADERS = {
-    "osd-xsrf": "kibana",
-    "User-Agent": (f"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-                   f"(KHTML, like Gecko) Chrome/{CHROME_VERSION}.0.0.0 Safari/537.36"),
+    "osd-xsrf": "kibana", #cân nhắc đổi thành true
     "Accept": "application/json, text/plain, */*",
-    "Accept-Language": "en-US,en;q=0.9",
     "Content-Type": "application/json",
-    "Sec-Ch-Ua": f'"Chromium";v="{CHROME_VERSION}", "Not)A;Brand";v="24"',
-    "Sec-Ch-Ua-Mobile": "?0",
-    "Sec-Ch-Ua-Platform": '"Windows"',
-    "Sec-Fetch-Site": "same-origin",
-    "Sec-Fetch-Mode": "cors",
-    "Sec-Fetch-Dest": "empty",
-    "Priority": "u=1, i",
 }
-
 SESSION_COOKIE = "security_authentication"
 NST_USER_COOKIE = "nst-user"
 NST_API_COOKIE = "nst-api"
 NST_TOKEN_COOKIE = "nst-token"
-TOKEN_KEYS = ("nst-token", "nst_token", "nstToken", "token", "jwt", "access_token")
+TOKEN_KEYS = ("nst_token", "nstToken", "token", "jwt", "access_token")
 
 TIMEOUT = 15
-
 
 class AuthError(RuntimeError):
     """Không dựng được một phiên dùng được."""
@@ -71,7 +55,6 @@ def _new_http(base, verify_tls):
             pass
     return http
 
-
 def set_nst_cookies(http, username=None, api_id=None, token=None):
     if username:
         http.cookies.set(NST_USER_COOKIE, username)
@@ -84,7 +67,6 @@ def set_nst_cookies(http, username=None, api_id=None, token=None):
 def login(base_url, username, password, verify_tls=False, roles=None) :
     base = base_url.rstrip("/")
     http = _new_http(base, verify_tls)
-
     try:
         resp = http.post(f"{base}{LOGIN_PATH}",
                          json={"username": username, "password": password},
@@ -103,9 +85,7 @@ def login(base_url, username, password, verify_tls=False, roles=None) :
     return shapes().Session(session=http, username=username,
                             roles=roles if roles is not None else _fetch_roles(http, base))
 
-
 def get_manager_host_id(session) -> str:
-
     http = session.session
     base = getattr(http, "base_url", "")
     if not base:
@@ -122,9 +102,7 @@ def get_manager_host_id(session) -> str:
     http.api_id = api_id                # task-D đọc lại từ đây
     return api_id
 
-
 def fetch_nst_token(session, api_id, force=False):
-    """Bước 3. Mint token cho manager API. Trả None kèm cảnh báo khi hỏng."""
     http = session.session
     base = getattr(http, "base_url", "")
     try:
@@ -145,7 +123,6 @@ def fetch_nst_token(session, api_id, force=False):
     set_nst_cookies(http, token=token)
     return token
 
-
 def _describe_body(resp):
     try:
         data = resp.json()
@@ -159,12 +136,6 @@ def _describe_body(resp):
             shape += f", data.keys={sorted(inner)}"
         return shape
     return f"body là {type(data).__name__}"
-
-
-def prepare_session(session, api_id, force=False):
-    set_nst_cookies(session.session, api_id=api_id)
-    session.session.api_id = api_id
-    return fetch_nst_token(session, api_id, force)
 
 def login_all_users(config_path: str) -> List:
     base_url, verify_tls, users = _read_config(config_path)
@@ -236,7 +207,7 @@ def _extract_roles(data):
     return []
 def _extract_api_id(data):
     node = _unwrap(data)
-    if isinstance(node, list):                       # [{"id": "manager-nst", ...}]
+    if isinstance(node, list):
         node = node[0] if node else None
     if isinstance(node, dict) and node.get("id"):
         return str(node["id"])
@@ -252,27 +223,3 @@ def _extract_token(resp):
             if isinstance(value, str) and value:
                 return value
     return None
-def _selftest(config_path):
-    sessions = login_all_users(config_path)
-    if not sessions:
-        print("[ERR] không có phiên nào hợp lệ")
-        return 1
-    for s in sessions:
-        http = s.session
-        print(f"[OK]  {s.username:24} id={getattr(http, 'api_id', '?')} "
-              f"token={'yes' if http.cookies.get(NST_TOKEN_COOKIE) else 'NO'}")
-        print(f"      roles={s.roles or '(không lấy được)'}")
-    return 0
-
-
-if __name__ == "__main__":
-    import argparse
-    ap = argparse.ArgumentParser(description="task-B auth self-test")
-    ap.add_argument("--selftest", action="store_true")
-    ap.add_argument("--config", default="config.yaml")
-    a = ap.parse_args()
-    try:
-        sys.exit(_selftest(a.config) if a.selftest else 0)
-    except AuthError as e:
-        print(f"[ERR] {e}", file=sys.stderr)
-        sys.exit(1)
