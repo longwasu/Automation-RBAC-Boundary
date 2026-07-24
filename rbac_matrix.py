@@ -121,6 +121,12 @@ def get_mock_results() -> List[ProbeResult]:
 
 
 def main():
+    # if (sys.version())
+    if (sys.version_info < (3, 12)):
+        print("Yêu cầu Python từ 3.12 trở lên!")
+        sys.exit(1)
+
+
     # print("[*] Đang khởi tạo kịch bản test...")
     # test_cases: List[Probe] = probe.generate_test_cases()
     # print("[*] Đang nạp RBAC Matrix từ config.yaml...")
@@ -146,7 +152,10 @@ def main():
     # print(get_mock_results()[0].username);
     report.render_table(get_mock_results())
     # report.render_error_details(get_mock_results())
-    report.write_junit(get_mock_results(), "rbac-test.xml")
+    report.write_junit(get_mock_results(), "rbac-test=result.xml")
+
+    exit_code = 0 if all([r.ok for r in get_mock_results()]) else 1
+    sys.exit(exit_code)
 
 
 if __name__ == "__main__":
