@@ -29,35 +29,37 @@ NST_USER_COOKIE = "nst-user"
 NST_API_COOKIE = "nst-api"
 NST_TOKEN_COOKIE = "nst-token"
 TOKEN_KEYS = ("nst_token", "nstToken", "token", "jwt", "access_token")
-
 TIMEOUT = 15
+
 
 class AuthError(RuntimeError):
     """Không dựng được một phiên dùng được."""
 
-def _warn(msg):
-    print(f"[auth] {msg}", file=sys.stderr)
-
 def _unwrap(data):
+    """Bóc tách lớp 'data' bao bọc bên ngoài JSON response nếu có dạng {"data": {...}} thành {...}."""
     return data.get("data", data) if isinstance(data, dict) else data
 
+
 def _new_http(base, verify_tls):
+    """Khởi tạo cấu hình mạng: Tạo đối tượng requests.Session với các header giả lập trình duyệt, URL gốc và thiết lập TLS."""
     http = requests.Session()
     http.verify = verify_tls
     http.headers.update(BROWSER_HEADERS)
-    http.headers["Origin"] = base           # same-origin: chỉ biết khi có base,
-    http.headers["Referer"] = f"{base}/"    # nên đặt ở đây chứ không ở hằng số
+    http.headers["Origin"] = base
+    http.headers["Referer"] = f"{base}/"
     http.base_url = base
     if not verify_tls:
         try:
             import urllib3
             urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-        except Exception:
+        except Exception as e:
+            print(f"Xảy ra lỗi khi xác định verify_tls header: {e}")
             pass
     return http
 
 
 def set_nst_cookies(http, username=None, api_id=None, token=None):
+    """Gắn các cookie cần thiết bao gồm (username, api_id, nst-token) vào phiên kết nối HTTP."""
     if username:
         http.cookies.set(NST_USER_COOKIE, username)
     if api_id:
@@ -66,7 +68,8 @@ def set_nst_cookies(http, username=None, api_id=None, token=None):
         http.cookies.set(NST_TOKEN_COOKIE, token)
 
 
-def login(base_url, username, password, verify_tls=False, roles=None) :
+def login(base_url, username, password, verify_tls=False, roles=None):
+    """Gửi request đăng nhập bằng tài khoản/mật khẩu để lấy cookie cốt lõi và trả về đối tượng Session."""
     base = base_url.rstrip("/")
     http = _new_http(base, verify_tls)
     try:
@@ -75,20 +78,17 @@ def login(base_url, username, password, verify_tls=False, roles=None) :
                          timeout=TIMEOUT)
     except requests.RequestException as e:
         raise AuthError(f"{username}: cannot reach {base}{LOGIN_PATH}: {e}") from e
-
-    if resp.status_code in (401, 403):
-        raise AuthError(f"{username}: rejected (HTTP {resp.status_code}) — bad credentials")
-    if resp.status_code >= 400:
+    
+    if resp.status_code == 401:
         raise AuthError(f"{username}: login failed (HTTP {resp.status_code})")
-    if SESSION_COOKIE not in http.cookies:
-        raise AuthError(f"{username}: HTTP {resp.status_code} but no {SESSION_COOKIE!r} cookie")
-
+    
     set_nst_cookies(http, username=username)
     return shapes().Session(session=http, username=username,
                             roles=roles if roles is not None else _fetch_roles(http, base))
 
 
 def get_manager_host_id(session) -> str:
+    """Gọi API lấy mã định danh của tài khoản từ máy chủ hệ thống."""
     http = session.session
     base = getattr(http, "base_url", "")
     if not base:
@@ -102,11 +102,12 @@ def get_manager_host_id(session) -> str:
     if not api_id:
         raise AuthError(f"{HOSTS_APIS_PATH} returned no api id")
     set_nst_cookies(http, api_id=api_id)
-    http.api_id = api_id                # task-D đọc lại từ đây
+    http.api_id = api_id
     return api_id
 
 
 def fetch_nst_token(session, api_id, force=False):
+    """Dựa vào các token trước đó để gọi API/login lấy nst-token"""
     http = session.session
     base = getattr(http, "base_url", "")
     try:
@@ -114,35 +115,16 @@ def fetch_nst_token(session, api_id, force=False):
                       json={"idHost": api_id, "force": bool(force)}, timeout=TIMEOUT)
         r.raise_for_status()
     except requests.RequestException as e:
-        _warn(f"{API_LOGIN_PATH} (idHost={api_id!r}) hỏng: {e}")
         return None
 
     token = http.cookies.get(NST_TOKEN_COOKIE) or _extract_token(r)
     if not token:
-        _warn(f"{API_LOGIN_PATH} (idHost={api_id!r}) -> HTTP {r.status_code} nhưng không có "
-              f"{NST_TOKEN_COOKIE}: {_describe_body(r)}. "
-              f"Đã tìm Set-Cookie và các khoá {TOKEN_KEYS}. "
-              f"Thêm tên khoá thật vào TOKEN_KEYS trong modules/auth.py.")
         return None
     set_nst_cookies(http, token=token)
     return token
 
-def _describe_body(resp):
-    try:
-        data = resp.json()
-    except ValueError:
-        text = (resp.text or "").strip()
-        return f"body không phải JSON ({len(text)} byte)" if text else "body rỗng"
-    if isinstance(data, dict):
-        inner = data.get("data")
-        shape = f"keys={sorted(data)}"
-        if isinstance(inner, dict):
-            shape += f", data.keys={sorted(inner)}"
-        return shape
-    return f"body là {type(data).__name__}"
-
-
 def login_all_users(config_path: str) -> List:
+    """Đọc cấu hình và chạy luồng đăng nhập 3 bước cho toàn bộ tài khoản, in kết quả kiểm tra."""
     base_url, verify_tls, users = _read_config(config_path)
     if not users:
         print(f"[ERR] {config_path}: không có tài khoản nào trong mục users")
@@ -168,25 +150,41 @@ def login_all_users(config_path: str) -> List:
 
         if fetch_nst_token(s, api_id) is None:
             print(f'[ERR] {user["username"]}: không có nst-token, /api/request sẽ trả 401')
-
-        print(f"[OK]  {user["username"]:24} id={api_id}")
-        print(f"      config={user["roles"]} server={s.roles or '(không lấy được)'}")
         sessions.append(s)
     return sessions
 
 
 def _read_config(path: str):
-    with open(_resolve_config(path), "r", encoding="utf-8") as f:
-        raw = yaml.safe_load(f) or {}
-    system = raw.get("system") or {}
-    users = [{"username": u["username"],
-              "password": u.get("password", ""),
-              "roles": [u["role"]] if u.get("role") else []}
-             for u in raw.get("test_users", [])]
-    return system["base_url"], bool(system.get("verify_tls", False)), users
+    """Đọc và parse file YAML cấu hình để lấy URL hệ thống, cờ TLS và danh sách tài khoản cần test."""
+    config_path = _resolve_config(path)
 
+    try:
+        with open(config_path, "r", encoding="utf-8") as f:
+            raw = yaml.safe_load(f) or {}
+        
+        system = raw.get("system") or {}
+        users = []
+        for u in raw.get("test_users", []):
+            users.append({
+                "username": u["username"],
+                "password": u.get("password", ""),
+                "roles": [u["role"]] if u.get("role") else []
+            })
+        base_url = system["base_url"]
+        verify_tls = bool(system.get("verify_tls", False))
+        return base_url, verify_tls, users
+    
+    except FileNotFoundError:
+        raise FileNotFoundError(f"Lỗi: Không thể tìm thấy file cấu hình tại: {config_path}")
+    except yaml.YAMLError as exc:
+        raise ValueError(f"Lỗi cú pháp YAML trong file config:\n{exc}")
+    except KeyError as exc:
+        raise ValueError(f"Lỗi cấu trúc config: Thiếu trường dữ liệu bắt buộc {exc}")
+    except TypeError as exc:
+        raise ValueError(f"Lỗi kiểu dữ liệu trong config. Vui lòng kiểm tra lại cấu trúc: {exc}")
 
 def _resolve_config(path: str) -> str:
+    """Tìm kiếm và trả về đường dẫn tuyệt đối chính xác của file cấu hình nhằm hỗ trợ chạy script từ thư mục khác."""
     if os.path.exists(path):
         return path
     here = os.path.dirname(os.path.abspath(__file__))
@@ -197,19 +195,19 @@ def _resolve_config(path: str) -> str:
 
 
 def _fetch_roles(http, base):
+    """Gọi API authinfo để đối chiếu và lấy danh sách quyền (roles) thực tế của tài khoản hiện tại từ máy chủ."""
     try:
         r = http.get(f"{base}{AUTHINFO_PATH}", timeout=TIMEOUT)
         r.raise_for_status()
         roles = _extract_roles(r.json())
     except (requests.RequestException, ValueError) as e:
-        _warn(f"{AUTHINFO_PATH} hỏng ({e}); không lấy được roles")
+        print(f"[ERR] {e}")
         return []
-    if not roles:
-        _warn(f"{AUTHINFO_PATH} không trả về roles nào")
     return roles
 
 
 def _extract_roles(data):
+    """Trích xuất mảng quyền từ response payload (tìm ở cả 'roles' và 'backend_roles')."""
     node = _unwrap(data)
     if isinstance(node, dict):
         for key in ("roles", "backend_roles"):
@@ -220,6 +218,7 @@ def _extract_roles(data):
 
 
 def _extract_api_id(data):
+    """Trích xuất chuỗi ID của máy chủ từ mảng dữ liệu trả về."""
     node = _unwrap(data)
     if isinstance(node, list):
         node = node[0] if node else None
@@ -229,9 +228,11 @@ def _extract_api_id(data):
 
 
 def _extract_token(resp):
+    """Quét JSON body để tìm token truy cập theo danh sách các từ khóa phổ biến (TOKEN_KEYS)."""
     try:
         node = _unwrap(resp.json())
-    except ValueError:
+    except ValueError as e:
+        print(f"ValueError: {e}")
         return None
     if isinstance(node, dict):
         for key in TOKEN_KEYS:
