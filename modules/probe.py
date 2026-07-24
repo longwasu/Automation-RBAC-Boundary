@@ -8,7 +8,6 @@ from typing import List, Optional
 
 _shapes = None
 
-
 def shapes():
     """
     Lấy các định nghĩa class (Session, Matrix, Probe...) từ rbac_matrix.py.
