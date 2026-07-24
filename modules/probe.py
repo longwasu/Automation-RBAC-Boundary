@@ -89,8 +89,6 @@ def generate_test_cases(matrix) -> List:
 
 def _group_paths(group, paths):
     """Trích xuất mọi đường dẫn trong matrix liệt kê cho nhóm, chuyển thành chúng thành dạng gọi được."""
-    if group == "rbac":
-        return ["/security/users"]
     out = []
     for raw in (paths or "").split(","):
         path = raw.strip()

@@ -96,13 +96,13 @@ def main():
         results_for_user: List[ProbeResult] = probe.execute_probes(session, matrix_data, test_cases)
         all_results.extend(results_for_user) # unpack list
 
-    # print("\n[*] Đang tổng hợp báo cáo...")
-    # report.render_table(all_results)
-    # report.write_junit(all_results(), "rbac-test-results.xml")
+    print("\n[*] Đang tổng hợp báo cáo...")
+    report.render_table(all_results)
+    report.write_junit(all_results(), "rbac-test-results.xml")
     
-    # exit_code = 0 if all([r.ok for r in all_results()]) else 1
-    # print(f"[*] Kết thúc kiểm thử. Exit code: {exit_code}")
-    # sys.exit(exit_code)
+    exit_code = 0 if all([r.ok for r in all_results()]) else 1
+    print(f"[*] Kết thúc kiểm thử. Exit code: {exit_code}")
+    sys.exit(exit_code)
 
 
 if __name__ == "__main__":
