@@ -4,17 +4,15 @@ rules:
   - descriptions: "non-admin → mọi write /security/* = DENY"
     roles: ["*"]
     exclude_roles: ["all_access"]
-    methods: ["POST", "PUT", "DELETE", "PATCH"]
-    paths: ["/security/*"]
+    methods: ["POST", "PUT", "DELETE"]
+    paths: ["/security"]
     effect: DENY
   
-
   - descriptions: "viewer/auditor/hunter → mọi write (agents/ruleset/groups/AR) = DENY"
     roles: ["nst_soc_viewer", "nst_compliance_auditor", "nst_threat_hunting_ro"]
-    methods: ["POST", "PUT", "DELETE", "PATCH"]
+    methods: ["POST", "PUT", "DELETE"]
     paths: ["/agents", "/ruleset", "/groups", "/ar"]
     effect: DENY
-
 
   - descriptions: "auditor/hunter → GET /agents = DENY"
     roles: ["nst_compliance_auditor", "nst_threat_hunting_ro"]
@@ -22,14 +20,12 @@ rules:
     paths: ["/agents"]
     effect: DENY
 
-
   - descriptions: "run-command = DENY trừ admin"
-    roles: [*]
+    roles: ["*"]
     exclude_roles: ["all_access"]
     methods: ["POST"]
     paths: ["/ar/run-command"]
     effect: DENY
-
 
   - descriptions: "AR high = DENY với viewer/auditor/hunter"
     roles: ["nst_soc_viewer", "nst_compliance_auditor", "nst_threat_hunting_ro"]
@@ -37,7 +33,6 @@ rules:
     paths: ["/ar/isolate", "/ar/kill-process", "/ar/quarantine-file"]
     effect: DENY
     
-
   - descriptions: "admin → tất cả ALLOW"
     roles: ["all_access"]
     methods: ["*"]
