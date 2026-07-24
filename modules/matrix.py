@@ -1,13 +1,13 @@
+from typing import Dict, Any
+from rbac_matrix import Matrix
+
 import json
+import os
+import requests
 
-def load_matrix(session):
-    if session == None:
-        with open('../matrix.sample.json', 'r', encoding='utf-8') as f:
-            return json.load(f)
-
-def expected_allow(matrix, roles, group, method, action=None):
-    admin_role = matrix.get("adminRole", "all_access")
-    if admin_role in roles:
+def expected_allow(matrix: Matrix, role: str, group: str, method: str, action=None):
+    admin_role = matrix.raw_data.get("adminRole")
+    if role == admin_role:
         return True
 
     if method == 'GET':
@@ -18,26 +18,24 @@ def expected_allow(matrix, roles, group, method, action=None):
     if group == 'ar-command':
         if op == 'read':
             return True
-            
+                
         if action == 'delete':
-            allowed_delete_roles = matrix.get("ar", {}).get("taskDeleteRoles", [])
-            return any(role in allowed_delete_roles for role in roles)
+            allowed_delete_roles = matrix.raw_data.get("ar", {}).get("taskDeleteRoles", [])
+            return role in allowed_delete_roles
+                
+        action_risk = matrix.raw_data.get("ar", {}).get("actionRisk", {}).get(action)
             
-        action_risk = matrix.get("ar", {}).get("actionRisk", {}).get(action)
-        
         if action_risk:
-            for role in roles:
-                allowed_risks = matrix.get("ar", {}).get("roleRisk", {}).get(role, [])
-                if action_risk in allowed_risks:
-                    return True
-                    
+            allowed_risks = matrix.raw_data.get("ar", {}).get("roleRisk", {}).get(role, [])
+            if action_risk in allowed_risks:
+                return True
+                        
         return False
 
-    grant = matrix.get("baseline", {}).get(group, "")
-    for role in roles:
-        role_caps = matrix.get("caps", {}).get(role, {})
-        grant += role_caps.get(group, "")
-        
+    grant = matrix.raw_data.get("baseline", {}).get(group, "")
+    role_caps = matrix.raw_data.get("caps", {}).get(role, {})
+    grant += role_caps.get(group, "")
+            
     if op == 'read' and 'r' in grant:
         return True
     if op == 'write' and 'w' in grant:
@@ -45,53 +43,78 @@ def expected_allow(matrix, roles, group, method, action=None):
 
     return False
 
+def load_matrix(session = None):
+    if session == None:
+        with open('../matrix.sample.json', 'r', encoding='utf-8') as f:
+            return Matrix(json.load(f))
+    else:
+        file_path = '../matrix.json'
+        
+        if os.path.exists(file_path):
+            with open(file_path, 'r', encoding='utf-8') as f:
+                return Matrix(json.load(f))
+        
+        else:
+            try:
+                api_url = "https://edr-dev.nstgroup.vn/api/role-tiers/matrix"
+                response = session.get(api_url, timeout = 10)
+                            
+                if response.status_code == 200:
+                    matrix_data = response.json()
+                            
+                with open(file_path, 'w', encoding='utf-8') as f:
+                    json.dump(matrix_data, f, ensure_ascii=False, indent=4)
+                                    
+                return Matrix(matrix_data)
+            
+            except requests.exceptions:
+                print("Connection Error: khong tai duoc file Matrix.json")
+
 if __name__ == "__main__":
-    matrix_data = load_matrix()
-    
-    # Danh sách 15 kịch bản để bao phủ toàn bộ các góc ngách của ma trận quyền[cite: 1, 2]
-    # Cấu trúc: (roles, group, method, action, expected_result, mô_tả)
+    matrix: Matrix = load_matrix()
+
     test_cases = [
-        # 1. Admin bypass toàn bộ
-        (["all_access"], "rbac", "POST", None, True, "Admin ghi rbac (Bypass)"),
-        
-        # 2. Quyền mặc định (Baseline)
-        (["nst_threat_hunting_ro"], "health", "GET", None, True, "Hunter đọc health (từ baseline)"),
-        (["nst_compliance_auditor"], "self", "POST", None, True, "Auditor ghi self (từ baseline)"),
-        
-        # 3. Quyền mở rộng (Caps) thông thường
-        (["nst_soc_viewer"], "agents", "GET", None, True, "Viewer đọc agents"),
-        (["nst_soc_viewer"], "agents", "POST", None, False, "Viewer ghi agents (Chặn)"),
-        (["nst_soc_manager"], "agents", "POST", None, True, "Manager ghi agents"),
-        (["nst_compliance_auditor"], "agents", "GET", None, False, "Auditor đọc agents (Không có trong caps)"),
-        
-        # 4. Quyền trên Active Response (ar-command)
-        (["nst_soc_viewer"], "ar-command", "GET", None, True, "Viewer xem danh sách AR"),
-        (["nst_soc_viewer"], "ar-command", "POST", "ping", True, "Viewer chạy ping (rủi ro read)"),
-        (["nst_soc_viewer"], "ar-command", "POST", "isolate", False, "Viewer chạy isolate (Chặn do rủi ro high)"),
-        (["nst_soc_analyst"], "ar-command", "POST", "isolate", True, "Analyst chạy isolate (rủi ro high)"),
-        
-        # 5. Quyền xóa task AR (taskDeleteRoles)
-        (["nst_soc_analyst"], "ar-command", "DELETE", "delete", False, "Analyst xóa task AR (Chặn)"),
-        (["nst_soc_manager"], "ar-command", "DELETE", "delete", True, "Manager xóa task AR"),
-        
-        # 6. Quyền RCE (Run-command)
-        (["nst_soc_manager"], "ar-command", "POST", "run-command", False, "Manager chạy RCE (Chặn do rủi ro exec)"),
-        (["all_access"], "ar-command", "POST", "run-command", True, "Admin chạy RCE (Bypass)"),
+        # --- NHÓM 1: QUYỀN ADMIN (Bypass mọi thứ) ---
+        ("all_access", "agents", "POST", None, True, "[Admin] Bỏ qua luật, cho phép ghi agents"),
+        ("all_access", "ar-command", "POST", "run-command", True, "[Admin] Bỏ qua luật AR, chạy lệnh nguy hiểm"),
+
+        # --- NHÓM 2: QUYỀN BASELINE (Quyền mặc định của mọi user) ---
+        ("nst_soc_viewer", "health", "GET", None, True, "[Baseline] Viewer đọc health (r)"),
+        ("nst_soc_viewer", "health", "POST", None, False, "[Baseline] Viewer ghi health (Chặn vì chỉ có r)"),
+        ("nst_compliance_auditor", "self", "POST", None, True, "[Baseline] Auditor ghi profile cá nhân (rw)"),
+
+        # --- NHÓM 3: QUYỀN CAPS (Quyền mở rộng theo Role) ---
+        ("nst_soc_viewer", "agents", "GET", None, True, "[Caps] Viewer đọc agents (r)"),
+        ("nst_soc_viewer", "agents", "POST", None, False, "[Caps] Viewer ghi agents (Chặn vì chỉ có r)"),
+        ("nst_soc_manager", "agents", "POST", None, True, "[Caps] Manager ghi agents (rw)"),
+        ("nst_compliance_auditor", "agents", "GET", None, False, "[Caps] Auditor đọc agents (Chặn vì caps trống)"),
+
+        # --- NHÓM 4: ACTIVE RESPONSE - NHÓM LỆNH THƯỜNG ---
+        ("nst_soc_viewer", "ar-command", "GET", None, True, "[AR] Ai cũng có quyền đọc danh sách AR (GET -> read)"),
+        ("nst_soc_viewer", "ar-command", "POST", "ping", True, "[AR - Risk] Viewer chạy ping (Cho phép vì rủi ro low)"),
+        ("nst_soc_viewer", "ar-command", "POST", "isolate", False, "[AR - Risk] Viewer chạy isolate (Chặn vì rủi ro high)"),
+        ("nst_soc_analyst", "ar-command", "POST", "isolate", True, "[AR - Risk] Analyst chạy isolate (Cho phép vì có quyền high)"),
+        ("nst_soc_analyst", "ar-command", "POST", "run-command", False, "[AR - Risk] Analyst chạy RCE (Chặn vì không có quyền exec)"),
+
+        # --- NHÓM 5: ACTIVE RESPONSE - NHÓM XÓA TASK ---
+        ("nst_soc_manager", "ar-command", "DELETE", "delete", True, "[AR - Delete] Manager xóa task (Có trong taskDeleteRoles)"),
+        ("nst_soc_analyst", "ar-command", "DELETE", "delete", False, "[AR - Delete] Analyst xóa task (Chặn vì không có tên)"),
     ]
 
     print(f"{'KẾT QUẢ':<10} | {'MÔ TẢ KỊCH BẢN'}")
-    print("-" * 65)
+    print("-" * 75)
 
     passed_count = 0
-    for roles, group, method, action, expected, desc in test_cases:
-        actual = expected_allow(matrix_data, roles, group, method, action)
+    for role, group, method, action, expected, desc in test_cases:
+        actual = expected_allow(matrix, role, group, method, action)
+        
         if actual == expected:
             status = "PASS"
             passed_count += 1
         else:
-            status = f"FAIL"
+            status = f"FAIL (Expected: {expected}, Actual: {actual})"
             
         print(f"{status:<10} | {desc}")
         
-    print("-" * 65)
+    print("-" * 75)
     print(f"Tổng kết: Đạt {passed_count}/{len(test_cases)} kịch bản kiểm thử.")
