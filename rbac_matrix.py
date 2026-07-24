@@ -100,8 +100,8 @@ def main():
     print("\n[*] Đang tổng hợp báo cáo...")
     report.render_table(all_results)
     report.write_junit(all_results(), "rbac-test-results.xml")
-    
-    exit_code = 0 if all([r.ok for r in all_results()]) else 1
+
+    exit_code = 0 if all([r.ok for r in all_results]) else 1
     print(f"[*] Kết thúc kiểm thử. Exit code: {exit_code}")
     sys.exit(exit_code)
 
