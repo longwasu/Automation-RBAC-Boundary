@@ -121,11 +121,9 @@ def get_mock_results() -> List[ProbeResult]:
 
 
 def main():
-    # if (sys.version())
     if (sys.version_info < (3, 12)):
         print("Yêu cầu Python từ 3.12 trở lên!")
         sys.exit(1)
-
 
     # print("[*] Đang khởi tạo kịch bản test...")
     # test_cases: List[Probe] = probe.generate_test_cases()
@@ -133,12 +131,10 @@ def main():
     # matrix_data: Matrix = matrix.load_matrix("config.yaml") 
     
     # print("[*] Đang thực hiện đăng nhập các tài khoản giả lập...")
-    # active_sessions: List[Session] = auth.login_all_users("config.yaml")
-    # for session in active_sessions:
-    #     print(f"  -> Tài khoản '{session.username}' đăng nhập thành công với quyền: {session.roles}")
-    # if not active_sessions:
-    #     print("[!] Không có phiên đăng nhập nào hợp lệ. Dừng chương trình.")
-    #     sys.exit(1)
+    active_sessions: List[Session] = auth.login_all_users("config.yaml")
+    if not active_sessions:
+        print("[!] Không có phiên đăng nhập nào hợp lệ. Dừng chương trình.")
+        sys.exit(1)
     
     # all_results: List[ProbeResult] = []
     # for session in active_sessions:
@@ -152,7 +148,7 @@ def main():
     # print(get_mock_results()[0].username);
     report.render_table(get_mock_results())
     # report.render_error_details(get_mock_results())
-    report.write_junit(get_mock_results(), "rbac-test=results.xml")
+    report.write_junit(get_mock_results(), "rbac-test-results.xml")
 
     exit_code = 0 if all([r.ok for r in get_mock_results()]) else 1
     sys.exit(exit_code)
