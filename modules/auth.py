@@ -8,7 +8,7 @@ HOSTS_APIS_PATH = "/hosts/apis"
 API_LOGIN_PATH = "/api/login"
 AUTHINFO_PATH = "/api/v1/auth/authinfo"
 BROWSER_HEADERS = {
-    "osd-xsrf": "true",
+    "osd-xsrf": "kibana",
     "Accept": "application/json, text/plain, */*",
     "Content-Type": "application/json",
 }
@@ -20,10 +20,6 @@ TIMEOUT = 15
 
 class AuthError(RuntimeError):
     """Không dựng được một phiên dùng được."""
-
-def _unwrap(data):
-    """Bóc tách lớp 'data' bao bọc bên ngoài JSON response nếu có dạng {"data": {...}} thành {...}."""
-    return data.get("data", data) if isinstance(data, dict) else data
 
 def _new_http(base, verify_tls):
     """Khởi tạo cấu hình mạng: Tạo đối tượng requests.Session với các header giả lập trình duyệt, URL gốc và thiết lập TLS."""
@@ -79,7 +75,15 @@ def get_manager_host_id(session) -> str:
     try:
         r = http.get(f"{base}{HOSTS_APIS_PATH}", timeout=TIMEOUT)
         r.raise_for_status()
-        api_id = _extract_api_id(r.json())
+        node = r.json()
+        node = node.get("data", node) if isinstance(node, dict) else node
+
+        if isinstance(node, list):
+            node = node[0] if node else None
+        if not isinstance(node, dict) or not node.get("id"):
+            raise AuthError(f"{HOSTS_APIS_PATH}: response không có trường 'id'")
+        api_id = str(node["id"])
+
     except (requests.RequestException, ValueError) as e:
         raise AuthError(f"{HOSTS_APIS_PATH} failed: {e}") from e
     set_nst_cookies(http, api_id=api_id)
@@ -137,7 +141,7 @@ def login_all_users(config_path: str) -> list[Session]:
     for s in sessions:
         set_nst_cookies(s.session, api_id=api_id)
         s.session.api_id = api_id
-        if fetch_nst_token(s, api_id) is None:   # thiếu token thì mọi probe trả 401
+        if fetch_nst_token(s, api_id) is None:
             print(f"[ERR] {s.username}: không lấy được nst-token, bỏ tài khoản này")
             continue
         ready.append(s)
@@ -169,7 +173,8 @@ def _fetch_roles(http, base) -> list[str]:
     try:
         r = http.get(f"{base}{AUTHINFO_PATH}", timeout=TIMEOUT)
         r.raise_for_status()
-        node = _unwrap(r.json())
+        node = r.json()
+        node = node.get("data", node) if isinstance(node, dict) else node
         if isinstance(node, dict):
             for key in ("roles", "backend_roles"):
                 value = node.get(key)
@@ -178,12 +183,3 @@ def _fetch_roles(http, base) -> list[str]:
     except (requests.RequestException, ValueError) as e:
         print(f"[ERR] Lỗi lấy role: {e}")
     return []
-
-def _extract_api_id(data) -> str:
-    """Trích xuất chuỗi ID của máy chủ từ mảng dữ liệu trả về."""
-    node = _unwrap(data)
-    if isinstance(node, list):
-        node = node[0] if node else None
-    if isinstance(node, dict) and node.get("id"):
-        return str(node["id"])
-    raise AuthError(f"{HOSTS_APIS_PATH}: response không có trường 'id'")
