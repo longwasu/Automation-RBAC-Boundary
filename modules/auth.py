@@ -18,14 +18,12 @@ NST_API_COOKIE = "nst-api"
 NST_TOKEN_COOKIE = "nst-token"
 TIMEOUT = 15
 
-
 class AuthError(RuntimeError):
     """Không dựng được một phiên dùng được."""
 
 def _unwrap(data):
     """Bóc tách lớp 'data' bao bọc bên ngoài JSON response nếu có dạng {"data": {...}} thành {...}."""
     return data.get("data", data) if isinstance(data, dict) else data
-
 
 def _new_http(base, verify_tls):
     """Khởi tạo cấu hình mạng: Tạo đối tượng requests.Session với các header giả lập trình duyệt, URL gốc và thiết lập TLS."""
@@ -44,7 +42,6 @@ def _new_http(base, verify_tls):
             pass
     return http
 
-
 def set_nst_cookies(http, username=None, api_id=None, token=None):
     """Gắn các cookie cần thiết bao gồm (username, api_id, nst-token) vào phiên kết nối HTTP."""
     if username:
@@ -53,7 +50,6 @@ def set_nst_cookies(http, username=None, api_id=None, token=None):
         http.cookies.set(NST_API_COOKIE, api_id)
     if token:
         http.cookies.set(NST_TOKEN_COOKIE, token)
-
 
 def login(base_url, username, password, verify_tls=False, roles=None):
     """Gửi request đăng nhập bằng tài khoản/mật khẩu để lấy cookie cốt lõi và trả về đối tượng Session."""
@@ -75,7 +71,6 @@ def login(base_url, username, password, verify_tls=False, roles=None):
     return Session(session=http, username=username,
                    roles=roles if roles is not None else _fetch_roles(http, base))
 
-
 def get_manager_host_id(session) -> str:
     """Gọi API lấy mã định danh của tài khoản từ máy chủ hệ thống."""
     http = session.session
@@ -90,7 +85,6 @@ def get_manager_host_id(session) -> str:
     set_nst_cookies(http, api_id=api_id)
     http.api_id = api_id
     return api_id
-
 
 def fetch_nst_token(session, api_id, force=False):
     """Dựa vào các token trước đó để gọi API/login lấy nst-token"""
@@ -110,12 +104,11 @@ def fetch_nst_token(session, api_id, force=False):
     set_nst_cookies(http, token=token)
     return token
 
-def login_all_users(config_path: str) -> List[Session]:
+def login_all_users(config_path: str) -> list[Session]:
     """Đọc cấu hình và chạy luồng đăng nhập cho toàn bộ tài khoản, in kết quả kiểm tra."""
-    
     try:
         base_url, verify_tls, users = _read_config(config_path)
-    except AuthError as e:                       # main chờ một list, không phải traceback
+    except AuthError as e:
         print(f"[ERR] {e}")
         return []
     if not users:
@@ -125,7 +118,6 @@ def login_all_users(config_path: str) -> List[Session]:
     sessions, api_id = [], None
     for user in users:
         try:
-            # dùng role khai trong config; không khai thì hỏi server qua authinfo
             s = login(base_url, user["username"], user["password"], verify_tls,
                       roles=user["roles"] or None)
         except AuthError as e:
@@ -134,14 +126,13 @@ def login_all_users(config_path: str) -> List[Session]:
         if api_id is None:
             try:
                 api_id = get_manager_host_id(s)
-            except AuthError as e:               # không loại phiên, chỉ chưa có id
+            except AuthError as e:
                 print(f'[WARN] {user["username"]}: không đọc được api id: {e}')
         sessions.append(s)
 
     if api_id is None:
         print("[ERR] không tài khoản nào đọc được api id")
         return []
-
     ready = []
     for s in sessions:
         set_nst_cookies(s.session, api_id=api_id)
@@ -152,8 +143,7 @@ def login_all_users(config_path: str) -> List[Session]:
         ready.append(s)
     return ready
 
-
-def _read_config(config_path: str):
+def _read_config(config_path: str)-> tuple[str, bool, list[dict]]:
     """Đọc và parse file YAML cấu hình để lấy URL hệ thống, cờ TLS và danh sách tài khoản cần test."""
     try:
         with open(config_path, "r", encoding="utf-8") as f:
@@ -174,8 +164,7 @@ def _read_config(config_path: str):
     except Exception as e:
         raise AuthError(f"Lỗi đọc file config: {e}")
      
-
-def _fetch_roles(http, base):
+def _fetch_roles(http, base) -> list[str]:
     """Gọi API authinfo để đối chiếu và lấy danh sách quyền thực tế của tài khoản hiện tại từ máy chủ."""
     try:
         r = http.get(f"{base}{AUTHINFO_PATH}", timeout=TIMEOUT)
@@ -190,8 +179,7 @@ def _fetch_roles(http, base):
         print(f"[ERR] Lỗi lấy role: {e}")
     return []
 
-
-def _extract_api_id(data):
+def _extract_api_id(data) -> str:
     """Trích xuất chuỗi ID của máy chủ từ mảng dữ liệu trả về."""
     node = _unwrap(data)
     if isinstance(node, list):

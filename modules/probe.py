@@ -1,14 +1,10 @@
 from __future__ import annotations
 import re
-
 from modules.types import Probe, ProbeResult
-
 
 REQUEST_PATH = "/api/request"
 TIMEOUT = 15
-
 HOST_ID_TOKEN = "{host_id}"
-
 WRITE_VERB = {
     "agents": "DELETE",
     "ruleset": "PUT",
@@ -34,7 +30,7 @@ MANDATORY_PROBES = {
 RISK_ORDER = ["read", "change", "high", "exec"]
 AR_PREFERRED = {"read": "ping", "change": "unisolate", "high": "isolate", "exec": "run-command"}
 
-def generate_test_cases(matrix) -> List[ProbeResult]:
+def generate_test_cases(matrix) -> list[ProbeResult]:
     """
     Chuyển đổi dữ liệu ma trận quyền (matrix) thành danh sách các kịch bản test (Probe).
     Duyệt qua từng group, sinh ra request GET. Nếu group cho phép ghi, sinh thêm request POST/PUT/DELETE. Gọi thêm xử lý riêng cho ar-command.
@@ -70,7 +66,7 @@ def generate_test_cases(matrix) -> List[ProbeResult]:
 
     return probes
 
-def _group_paths(group, paths):
+def _group_paths(group, paths) -> list[str]:
     """Trích xuất mọi đường dẫn trong matrix liệt kê cho nhóm, chuyển thành chúng thành dạng gọi được."""
     out = []
     for raw in (paths or "").split(","):
@@ -84,8 +80,7 @@ def _group_paths(group, paths):
         out.append(path)
     return out or [f"/{group}"]
 
-
-def _ar_probes(paths, ar):
+def _ar_probes(paths, ar) -> list[Probe]:
     """Probe cho ar-command: đọc mọi path, ghi trên path xoá task, dispatch theo mức rủi ro."""
     probes, dispatch_base = [], None
     for path in paths:
