@@ -40,5 +40,3 @@ Công cụ tự động hóa kiểm thử phân quyền (Role-Based Access Contr
 Đảm bảo bạn đã thiết lập file config.yaml tại thư mục gốc. File này chứa thông tin các tài khoản giả lập, tạo file giống với định dạng của *config.example.yaml*
 
 
-    g
-

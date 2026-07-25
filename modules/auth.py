@@ -1,7 +1,5 @@
 from __future__ import annotations
 import os
-import sys
-from typing import List
 import requests
 import yaml
 
@@ -123,7 +121,7 @@ def fetch_nst_token(session, api_id, force=False):
     set_nst_cookies(http, token=token)
     return token
 
-def login_all_users(config_path: str) -> List:
+def login_all_users(config_path: str) -> list:
     """Đọc cấu hình và chạy luồng đăng nhập 3 bước cho toàn bộ tài khoản, in kết quả kiểm tra."""
     base_url, verify_tls, users = _read_config(config_path)
     if not users:

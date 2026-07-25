@@ -1,9 +1,8 @@
-from typing import Dict, Any
-from rbac_matrix import Matrix
-
+from modules.types import Matrix
 import json
 import os
 import requests
+
 
 def expected_allow(matrix: Matrix, role: str, group: str, method: str, action=None):
     admin_role = matrix.raw_data.get("adminRole")
