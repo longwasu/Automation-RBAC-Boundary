@@ -112,6 +112,7 @@ def fetch_nst_token(session, api_id, force=False):
 
 def login_all_users(config_path: str) -> List[Session]:
     """Đọc cấu hình và chạy luồng đăng nhập cho toàn bộ tài khoản, in kết quả kiểm tra."""
+    
     try:
         base_url, verify_tls, users = _read_config(config_path)
     except AuthError as e:                       # main chờ một list, không phải traceback
@@ -148,9 +149,7 @@ def login_all_users(config_path: str) -> List[Session]:
         if fetch_nst_token(s, api_id) is None:   # thiếu token thì mọi probe trả 401
             print(f"[ERR] {s.username}: không lấy được nst-token, bỏ tài khoản này")
             continue
-        print(f"[OK] {s.username} | host id: {api_id} | roles: {s.roles}")
         ready.append(s)
-    print(f"[*] {len(ready)}/{len(users)} tài khoản có phiên dùng được")
     return ready
 
 

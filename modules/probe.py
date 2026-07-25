@@ -1,6 +1,5 @@
 from __future__ import annotations
 import re
-import requests
 
 from modules.types import Probe, ProbeResult
 
@@ -84,3 +83,26 @@ def _group_paths(group, paths):
             path = path[:-2] or "/"
         out.append(path)
     return out or [f"/{group}"]
+
+
+def _ar_probes(paths, ar):
+    """Probe cho ar-command: đọc mọi path, ghi trên path xoá task, dispatch theo mức rủi ro."""
+    probes, dispatch_base = [], None
+    for path in paths:
+        probes.append(Probe("ar-command", "GET", path, {}))
+        if re.match(r"^/agents/[^/]+/ar$", path):
+            dispatch_base = path
+            probes.append(Probe("ar-command", "DELETE", path, {}))
+    if not dispatch_base:
+        return probes
+
+    by_risk = {}
+    for action, risk in (ar.get("actionRisk", {}) or {}).items():
+        by_risk.setdefault(risk, []).append(action)
+    known = [r for r in RISK_ORDER if r in by_risk]
+    for risk in known + [r for r in by_risk if r not in RISK_ORDER]:
+        actions = by_risk[risk]
+        action = AR_PREFERRED.get(risk)
+        probes.append(Probe("ar-command", "POST",
+                            f"{dispatch_base}/{action if action in actions else actions[0]}", {}))
+    return probes
