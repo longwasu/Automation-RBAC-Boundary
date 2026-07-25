@@ -1,5 +1,4 @@
-from rbac_matrix import ProbeResult
-
+from modules.types import ProbeResult
 import yaml
 
 def load_invariants():
