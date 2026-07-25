@@ -1,11 +1,10 @@
-import rich
+from rich import get_console
 from rich.table import Table
-from rbac_matrix import ProbeResult
-from typing import List, Dict, Optional, Any
+from modules.types import ProbeResult
 import xml.etree.ElementTree as ET
 
 
-def render_table(results: List[ProbeResult]):
+def render_table(results: list[ProbeResult]):
     if not results:
         print("[*] Không có dữ liệu để hiển thị.")
         return
@@ -14,7 +13,7 @@ def render_table(results: List[ProbeResult]):
     groups = sorted(list(set(r.group for r in results)))
     users = sorted(list(set(r.username for r in results)))
 
-    console = rich.get_console()
+    console = get_console()
     table = Table(title="MA TRẬN KẾT QUẢ KIỂM TRA PHÂN QUYỀN", title_style="bold magenta", show_lines=True)
     table.add_column("USER / GROUP")
     for group in groups: table.add_column(group, justify="center")
@@ -40,7 +39,7 @@ def render_table(results: List[ProbeResult]):
     )
 
 
-def write_junit(results: List[ProbeResult], path: str):
+def write_junit(results: list[ProbeResult], path: str):
     """
     Xuất kết quả kiểm thử ra định dạng JUnit XML cho CI/CD.
     """
