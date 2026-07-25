@@ -76,8 +76,10 @@ def login(base_url, username, password, verify_tls=False, roles=None):
     except requests.RequestException as e:
         raise AuthError(f"{username}: cannot reach {base}{LOGIN_PATH}: {e}") from e
     
-    if resp.status_code == 401:
-        raise AuthError(f"{username}: login failed (HTTP {resp.status_code})")
+    if resp.ok == 401:
+        raise AuthError(f"{username}: login bị từ chối (HTTP {resp.status_code})")
+    if not http.cookies.get(SESSION_COOKIE):
+        raise AuthError(f"{username}: login bị từ chối (HTTP {resp.status_code}) không lấy được cookie {SESSION_COOKIE}")
     
     set_nst_cookies(http, username=username)
     return shapes().Session(session=http, username=username,
@@ -109,7 +111,7 @@ def fetch_nst_token(session, api_id, force=False):
                       json={"idHost": api_id, "force": bool(force)}, timeout=TIMEOUT)
         r.raise_for_status()
     except requests.RequestException as e:
-        print("[ERR] fetch nst-token xảy ra lỗi: {e}")
+        print(f"[ERR] fetch nst-token xảy ra lỗi: {e}")
         return None
 
     token = http.cookies.get(NST_TOKEN_COOKIE)
@@ -149,10 +151,8 @@ def login_all_users(config_path: str) -> List:
     return sessions
 
 
-def _read_config(path: str):
+def _read_config(config_path: str):
     """Đọc và parse file YAML cấu hình để lấy URL hệ thống, cờ TLS và danh sách tài khoản cần test."""
-    config_path = _resolve_config(path)
-
     try:
         with open(config_path, "r", encoding="utf-8") as f:
             raw = yaml.safe_load(f) or {}
@@ -171,20 +171,10 @@ def _read_config(path: str):
     
     except Exception as e:
         raise AuthError(f"Lỗi đọc file config: {e}")
-        
-def _resolve_config(path: str) -> str:
-    """Tìm kiếm và trả về đường dẫn tuyệt đối chính xác của file cấu hình nhằm hỗ trợ chạy script từ thư mục khác."""
-    if os.path.exists(path):
-        return path
-    here = os.path.dirname(os.path.abspath(__file__))
-    candidate = os.path.join(here, os.path.basename(path))
-    if os.path.exists(candidate):
-        return candidate
-    return path
-
+     
 
 def _fetch_roles(http, base):
-    """Gọi API authinfo để đối chiếu và lấy danh sách quyền (roles) thực tế của tài khoản hiện tại từ máy chủ."""
+    """Gọi API authinfo để đối chiếu và lấy danh sách quyền thực tế của tài khoản hiện tại từ máy chủ."""
     try:
         r = http.get(f"{base}{AUTHINFO_PATH}", timeout=TIMEOUT)
         r.raise_for_status()
@@ -206,4 +196,4 @@ def _extract_api_id(data):
         node = node[0] if node else None
     if isinstance(node, dict) and node.get("id"):
         return str(node["id"])
-    return ""
+    raise AuthError(f"{HOSTS_APIS_PATH}: response không có trường 'id'")

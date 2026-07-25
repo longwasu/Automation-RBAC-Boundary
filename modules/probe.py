@@ -37,13 +37,13 @@ WRITE_VERB = {
     "agents-summary": None,
 }
 DEFAULT_WRITE_VERB = "POST"
-
-READ_BODY_PATH = {
-    "/agents": {"params": {"q": "id!=000", "offset": 0, "limit": 10, "sort": "+id"}},
-    "/rules": {"params": {"offset": 0, "limit": 10, "sort": "+id"}},
-    "/decoders": {"params": {"offset": 0, "limit": 10, "sort": "+filename"}},
+MANDATORY_PROBES = {
+    "rbac": [
+        ("POST", "/security/users", {}),
+        ("GET",  "/security/users", {}),
+        ("POST", "/security/roles", {}),
+    ],
 }
-
 RISK_ORDER = ["read", "change", "high", "exec"]
 AR_PREFERRED = {"read": "ping", "change": "unisolate", "high": "isolate", "exec": "run-command"}
 DENY_STATUS = 403
@@ -56,19 +56,33 @@ def generate_test_cases(matrix) -> List:
     raw = getattr(matrix, "raw_data", matrix)
     Probe = shapes().Probe
     probes = []
+    seen = set()
+
+    def _add(p):
+        key = (p.group, p.method, p.path)
+        if key not in seen:
+            seen.add(key)
+            probes.append(p)
+
     for entry in raw.get("groups", []) or []:
         group = entry.get("group")
         if not group:
             continue
         paths = _group_paths(group, entry.get("paths", ""))
         if group == "ar-command":
-            probes += _ar_probes(paths, raw.get("ar", {}) or {})
+            for p in _ar_probes(paths, raw.get("ar", {}) or {}):
+                _add(p)
         else:
             verb = WRITE_VERB.get(group, DEFAULT_WRITE_VERB)
             for path in paths:
-                probes.append(Probe(group, "GET", path, {}))
+                _add(Probe(group, "GET", path, {}))
                 if verb:
-                    probes.append(Probe(group, verb, path, {}))
+                    _add(Probe(group, verb, path, {}))
+
+    for group, entries in MANDATORY_PROBES.items():
+        for method, path, body in entries:
+            _add(Probe(group, method, path, body))
+
     return probes
 
 def _group_paths(group, paths):
@@ -139,11 +153,9 @@ def run_probe(session, host_id: str, probe) -> int:
     base = getattr(http, "base_url", "")
     if not base:
         raise RuntimeError("session has no base_url (task-B must set http.base_url)")
-    try:
-        r = http.post(f"{base}{REQUEST_PATH}",
-                      json=build_payload(host_id, probe), timeout=TIMEOUT)
-    except Exception as e:
-        print(f"{probe.method} {probe.path}: transport error: {e}")
+    
+    r = http.post(f"{base}{REQUEST_PATH}",
+                    json=build_payload(host_id, probe), timeout=TIMEOUT)
     return r.status_code
 
 
@@ -158,7 +170,11 @@ def execute_probes(session, matrix_data, test_cases) -> List:
     results = []
 
     for probe in test_cases:
-        status = run_probe(session, host_id, probe)
+        try:
+            status = run_probe(session, host_id, probe)
+        except Exception as e:
+            print(f"[!] {probe.method} {probe.path}: transport error: {e}")
+            continue
         results.append(ProbeResult(
             username=session.username,
             roles=session.roles,
