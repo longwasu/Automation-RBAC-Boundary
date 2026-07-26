@@ -6,9 +6,9 @@ def load_invariants():
         return yaml.safe_load(f)
 
 def check_invariants(invariants_data, role, method, path):
-    admin_role = invariants_data.get("admin_role")
+    admin_role = invariants_data.get('admin_role')
     if role == admin_role:
-        return "ALLOW"
+        return "ALLOW", "Admin Bypass"
 
     rules = invariants_data.get('rules', [])
 
@@ -29,9 +29,12 @@ def check_invariants(invariants_data, role, method, path):
         is_excluded = (role in exclude_roles)
 
         if is_target and not is_excluded:
-            return rule.get('effect')
+            effect = rule.get('effect')
+            rule_name = rule.get('desscriptions')
 
-    return None
+            return effect, rule_name
+
+    return None, None
 
 def reconcile(probe_result: ProbeResult) -> ProbeResult:
     actual = probe_result.actual_allow
