@@ -2,7 +2,7 @@ from modules.types import ProbeResult
 import yaml
 
 def load_invariants():
-    with open("../invariants.yaml", 'r', encoding="UTF-8") as f:
+    with open("invariants.yaml", 'r', encoding="UTF-8") as f:
         return yaml.safe_load(f)
 
 def check_invariants(invariants_data, role, method, path):
