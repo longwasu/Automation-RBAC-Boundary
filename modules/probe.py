@@ -1,6 +1,7 @@
 from __future__ import annotations
 import re
 from modules.types import Probe, ProbeResult
+from modules import matrix as matrix_mod, oracle
 
 REQUEST_PATH = "/api/request"
 TIMEOUT = 15
@@ -134,9 +135,63 @@ def run_probe(session, host_id: str, probe) -> int:
                     json=build_payload(host_id, probe), timeout=TIMEOUT)
     return r.status_code
 
+def _matrix_roles(matrix_data) -> set[str]:
+    """Quét JSON ma trận để thu thập toàn bộ các role phân quyền (tier role).
+    Tạo tập tham chiếu chuẩn để lọc bỏ các role hạ tầng dư thừa của user."""
+    raw = getattr(matrix_data, "raw_data", matrix_data) or {}
+    ar = raw.get("ar", {}) or {}
+    roles = set(raw.get("caps", {}) or {})
+    roles |= set(ar.get("roleRisk", {}) or {})
+    roles |= set(ar.get("taskDeleteRoles", []) or [])
+    admin = raw.get("adminRole")
+    if admin:
+        roles.add(admin)
+    return roles
+
+
+def _tier_role(roles, known) -> str | None:
+    """Lọc ra đúng một role mà ma trận biết. None nếu không có hoặc có nhiều hơn một."""
+    tiers = [r for r in roles if r in known]
+    return tiers[0] if len(tiers) == 1 else None
+
+
+def _ar_action(path: str, method: str) -> str | None:
+    """
+    Dịch ngược URL path và HTTP method ra tên hành động Active Response (vd: isolate, delete).
+    Cung cấp action cụ thể để đối chiếu quyền với ma trận (trả về None nếu chỉ là lệnh đọc).
+    """
+    m = re.match(r"^/agents/[^/]+/ar/(.+)$", path)
+    if m:
+        return m.group(1)
+    if method == "DELETE" and re.match(r"^/agents/[^/]+/ar$", path):
+        return "delete"
+    return None
+
+def judge_results(results, matrix_data, invariants_data) -> list[ProbeResult]:
+    """Duyệt qua các kết quả trả về (status response) và gọi module `matrix`, `oracle` để đối chiếu 
+    xác định kết quả cuối cùng (Khớp / Lỗi / Vi phạm luật cứng) cho từng test case.
+    """
+    known = _matrix_roles(matrix_data)
+    if not known:
+        print("[!] Ma trận không khai role nào, bỏ qua toàn bộ đối chiếu")
+        return results
+
+    for r in results:
+        tier = _tier_role(r.roles, known)
+        if tier is None:
+            print(f"[!] {r.username}: không xác định được tier role trong {r.roles}")
+            r.invariant_verdict = "SKIPPED"
+            continue
+
+        action = _ar_action(r.path, r.method) if r.group == "ar-command" else None
+        r.matrix_expected = matrix_mod.expected_allow(matrix_data, tier, r.group, r.method, action)
+        r.invariant_verdict = oracle.check_invariants(invariants_data, tier, r.method, r.path)
+        oracle.reconcile(r)
+    return results
+
 def execute_probes(session, matrix_data, test_cases) -> list[ProbeResult]:
     """Chạy mọi Probe với một phiên, trả về ProbeResult với actual_allow đã đo;
-    matrix_expected/invariant_verdict/ok để None cho task-C/task-E điền."""
+    matrix_expected/invariant_verdict/ok được gọi thẳng từ matrix và oracle để sử dụng làm cơ sở đưa ra kết quả cuối cùng."""
     host_id = getattr(session.session, "api_id", None)
     if not host_id:
         raise RuntimeError("session không có api_id")
@@ -148,6 +203,7 @@ def execute_probes(session, matrix_data, test_cases) -> list[ProbeResult]:
         except Exception as e:
             print(f"[!] {probe.method} {probe.path}: transport error: {e}")
             continue
+            
         results.append(ProbeResult(
             username=session.username,
             roles=session.roles,
@@ -160,4 +216,8 @@ def execute_probes(session, matrix_data, test_cases) -> list[ProbeResult]:
             invariant_verdict=None,
             ok=None,
         ))
+
+    invariants_data = oracle.load_invariants()    
+    if invariants_data is not None:
+        judge_results(results, matrix_data, invariants_data)
     return results
