@@ -8,7 +8,7 @@ echo " KHỞI ĐỘNG RBAC AUTOMATION TEST"
 echo "========================================"
 
 echo "[*] Đang kiểm tra và cài đặt dependencies..."
-pip install -r requirements.txt > /dev/null 2>&1
+python -m pip install -r requirements.txt > /dev/null
 
 echo "[*] Đang thực thi kịch bản kiểm thử..."
-python3 main.py
+python rbac_matrix.py

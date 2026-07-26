@@ -5,3 +5,4 @@ venv/
 .env
 rbac-test-results.xml
 matrix.json
+rbac-bundle.tar
