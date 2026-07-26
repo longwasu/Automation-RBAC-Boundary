@@ -1,40 +1,40 @@
 admin_role: all_access
 
 rules:
-  - descriptions: "non-admin → mọi write /security/* = DENY"
+  - descriptions: "R1. ADMIN có mọi quyền đọc/ghi."
+    roles: ["all_access"]
+    methods: ["*"]
+    paths: ["*"]
+    effect: ALLOW
+
+  - descriptions: "R2. Mọi Role trừ ADMIN không có quyền ghi vào /security/*"
     roles: ["*"]
     exclude_roles: ["all_access"]
     methods: ["POST", "PUT", "DELETE"]
     paths: ["/security"]
     effect: DENY
   
-  - descriptions: "viewer/auditor/hunter → mọi write (agents/ruleset/groups/AR) = DENY"
+  - descriptions: "R3. [viewer, auditor, hunter] không có quyền ghi vào [/agents, /ruleset, /groups, /ar]"
     roles: ["nst_soc_viewer", "nst_compliance_auditor", "nst_threat_hunting_ro"]
     methods: ["POST", "PUT", "DELETE"]
     paths: ["/agents", "/ruleset", "/groups", "/ar"]
     effect: DENY
 
-  - descriptions: "auditor/hunter → GET /agents = DENY"
+  - descriptions: "R4. [auditor, hunter] không có quyền đọc [/agents]"
     roles: ["nst_compliance_auditor", "nst_threat_hunting_ro"]
     methods: ["GET"]
     paths: ["/agents"]
     effect: DENY
 
-  - descriptions: "run-command = DENY trừ admin"
+  - descriptions: "R4. Chỉ ADMIN mới có quyền run-command"
     roles: ["*"]
     exclude_roles: ["all_access"]
     methods: ["POST"]
     paths: ["/ar/run-command"]
     effect: DENY
 
-  - descriptions: "AR high = DENY với viewer/auditor/hunter"
+  - descriptions: "R5. [viewer, auditor, hunter] không có quyền thực thi Action Response ở mức độ High"
     roles: ["nst_soc_viewer", "nst_compliance_auditor", "nst_threat_hunting_ro"]
     methods: ["POST"]
     paths: ["/ar/isolate", "/ar/kill-process", "/ar/quarantine-file"]
     effect: DENY
-    
-  - descriptions: "admin → tất cả ALLOW"
-    roles: ["all_access"]
-    methods: ["*"]
-    paths: ["*"]
-    effect: ALLOW
