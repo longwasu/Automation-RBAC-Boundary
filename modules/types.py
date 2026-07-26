@@ -53,7 +53,7 @@ class ProbeResult:
         status: Mã trạng thái HTTP trả về (VD: 200, 403, 401).
         actual_allow: Hệ thống có cho phép không, dựa vào trường status.
         matrix_expected: Ma trận phân quyền có cho phép không.
-        invariant_verdict: Kết quả kiểm tra tính bất biến (nếu có).
+        invariant_verdict: Luật bất biến vi phạm (nếu có).
         ok: True nếu actual_allow KHỚP với matrix_expected, ngược lại là False.
     """
     def __init__(self, username: str, roles: list[str], group: str, method: str, path: str, 
