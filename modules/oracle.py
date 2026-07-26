@@ -44,24 +44,19 @@ def reconcile(probe_result: ProbeResult) -> ProbeResult:
     
     if verdict == "DENY":
         if actual is True:
-            print(f"[!] FATAL ERROR {log_prefix}")
             probe_result.ok = False
             
         if expected is True:
-            print(f"[!] CONFIG ERROR {log_prefix}")
             probe_result.ok = False
             
     elif verdict == "ALLOW":
         if actual is False:
-            print(f"[!] FATAL ERROR {log_prefix}")
             probe_result.ok = False
             
         if expected is False:
-            print(f"[!] CONFIG ERROR {log_prefix}")
             probe_result.ok = False
             
     if actual != expected:
-        print(f"[!] LOGIC ERROR {log_prefix}")
         probe_result.ok = False
         
     return probe_result
