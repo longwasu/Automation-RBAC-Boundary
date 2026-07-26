@@ -8,7 +8,7 @@ def load_invariants():
 def check_invariants(invariants_data, role, method, path):
     admin_role = invariants_data.get('admin_role')
     if role == admin_role:
-        return "ALLOW", "Admin Bypass"
+        return "ALLOW", "Admin có mọi quyền đọc/ghi"
 
     rules = invariants_data.get('rules', [])
 
@@ -30,7 +30,7 @@ def check_invariants(invariants_data, role, method, path):
 
         if is_target and not is_excluded:
             effect = rule.get('effect')
-            rule_name = rule.get('desscriptions')
+            rule_name = rule.get('descriptions')
 
             return effect, rule_name
 
