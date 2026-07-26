@@ -43,8 +43,6 @@ def reconcile(probe_result: ProbeResult) -> ProbeResult:
 
     probe_result.ok = True
     
-    log_prefix = f"[{probe_result.method} {probe_result.path} | Role: {probe_result.roles}]"
-    
     if verdict == "DENY":
         if actual is True:
             probe_result.ok = False
