@@ -41,7 +41,7 @@ Công cụ tự động hóa kiểm thử phân quyền (Role-Based Access Contr
 Đảm bảo bạn đã thiết lập file config.yaml tại thư mục gốc. File này chứa thông tin các tài khoản giả lập, tạo file giống với định dạng của `config.example.yaml`
 
 **3. Khởi chạy kiểm thử**
-Có hai cách để chạy kịch bản kiểm thử này:
+Cách để chạy kịch bản kiểm thử này:
 
 *Cách A: Chạy tự động bằng Bash Script (Khuyên dùng cho CI/CD hoặc Git Bash trên Windows)*
 ```bash
@@ -62,6 +62,18 @@ pip install -r requirements.txt
 
 # 4. Chạy kịch bản
 python rbac_matrix.py
+```
+
+*Cách C: Chạy trong docker image (môi trường Linux/Git Bash)*
+```bash
+# 1. Build docker image, tạo ra file .tar
+./build-bundle.sh
+
+# 2. Giải nén file .tar, tạo ra docker image
+docker load -i <tên file.tar>
+
+# 3. Chạy docker image
+docker run --rm <tên docker image>
 ```
 
 ## 📊 Đọc kết quả báo cáo
