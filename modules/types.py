@@ -54,7 +54,7 @@ class ProbeResult:
         actual_allow: Hệ thống có cho phép không, dựa vào trường status.
         matrix_expected: Ma trận phân quyền có cho phép không.
         invariant_verdict: Luật bất biến vi phạm (nếu có).
-        ok: True nếu actual_allow KHỚP với matrix_expected, ngược lại là False.
+        ok: Được quyết định bởi actual_allow/matrix_expected/invariant_verdict trong reconcile()
     """
     def __init__(self, username: str, roles: list[str], group: str, method: str, path: str, 
                  status: int, actual_allow: bool, matrix_expected: bool, 

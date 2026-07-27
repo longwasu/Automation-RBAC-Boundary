@@ -18,16 +18,25 @@ def render_table(results: list[ProbeResult]):
     table.add_column("USER / GROUP")
     for group in groups: table.add_column(group, justify="center")
 
+    
     for user in users:
         row_data = [user]
         for group in groups:
             cell_results = [r for r in results if r.username == user and r.group == group]
         
-            # Xét 4 trường hợp: rỗng, vi phạm luật bất biến, hợp lệ nếu tất cả ok, không hợp lệ nếu có ít nhất 1 fail
-            if not cell_results: row_data.append("-")
-            elif any([r.invariant_verdict for r in cell_results]): row_data.append("[yellow]![/yellow]")
-            elif all([r.ok for r in cell_results]): row_data.append("[bold green]✓[/bold green]")
+            if not cell_results: 
+                row_data.append("-")
+                continue
+
+            if all([r.ok for r in cell_results]): 
+                row_data.append("[bold green]✓[/bold green]")
+                continue
+
+            failed_results = [r for r in cell_results if not r.ok]
+            has_invariant_violation = any([r.invariant_verdict is not None for r in failed_results])
+            if has_invariant_violation: row_data.append("[yellow]![/yellow]")
             else: row_data.append("[bold red]✗[/bold red]")
+
         table.add_row(*row_data)
 
     console.print(table)
