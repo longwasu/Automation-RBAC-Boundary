@@ -32,13 +32,7 @@ def check_invariants(invariants_data, role, method, path):
 
     return None, None
 
-def reconcile(probe_result: ProbeResult) -> ProbeResult:
-    actual = probe_result.actual_allow
-    expected = probe_result.matrix_expected
-    verdict = probe_result.invariant_verdict
-
-    probe_result.ok = True
-    
+def reconcile(actual: bool, expected: bool, verdict: str) -> bool:
     if verdict == "DENY":
         if actual is True:
             return False
