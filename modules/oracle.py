@@ -6,10 +6,6 @@ def load_invariants():
         return yaml.safe_load(f)
 
 def check_invariants(invariants_data, role, method, path):
-    admin_role = invariants_data.get('admin_role')
-    if role == admin_role:
-        return "ALLOW", "Admin có mọi quyền đọc/ghi"
-
     rules = invariants_data.get('rules', [])
 
     for rule in rules:

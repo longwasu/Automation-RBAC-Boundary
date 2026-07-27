@@ -23,11 +23,19 @@ def render_table(results: list[ProbeResult]):
         for group in groups:
             cell_results = [r for r in results if r.username == user and r.group == group]
         
-            # Xét 4 trường hợp: rỗng, vi phạm luật bất biến, hợp lệ nếu tất cả ok, không hợp lệ nếu có ít nhất 1 fail
-            if not cell_results: row_data.append("-")
-            elif any([r.invariant_verdict for r in cell_results]): row_data.append("[yellow]![/yellow]")
-            elif all([r.ok for r in cell_results]): row_data.append("[bold green]✓[/bold green]")
+            if not cell_results: 
+                row_data.append("-")
+                continue
+
+            if all([r.ok for r in cell_results]): 
+                row_data.append("[bold green]✓[/bold green]")
+                continue
+
+            failed_results = [r for r in cell_results if not r.ok]
+            has_invariant_violation = any([r.invariant_verdict is not None for r in failed_results])
+            if has_invariant_violation: row_data.append("[yellow]![/yellow]")
             else: row_data.append("[bold red]✗[/bold red]")
+
         table.add_row(*row_data)
 
     console.print(table)
@@ -62,7 +70,7 @@ def write_junit(results: list[ProbeResult], path: str):
         if not r.ok:
             if r.invariant_verdict:
                 ET.SubElement(testcase, "failure", message="Oracle Invariant Violation", type="OracleInvariantError"
-                ).text = f"Vi phạm luật bất biến: {r.invariant_verdict}"
+                ).text = f"Vi phạm luật bất biến: {r.invariant_description}"
             else:
                 ET.SubElement(testcase, "failure", message="RPAC Matrix Mismatch", type="MatrixMismatchError"
                 ).text = f"Ma trận yêu cầu: {r.matrix_expected} / Hệ thống trả về: {r.actual_allow}"
