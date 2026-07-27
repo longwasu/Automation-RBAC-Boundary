@@ -53,12 +53,13 @@ class ProbeResult:
         status: Mã trạng thái HTTP trả về (VD: 200, 403, 401).
         actual_allow: Hệ thống có cho phép không, dựa vào trường status.
         matrix_expected: Ma trận phân quyền có cho phép không.
-        invariant_verdict: Luật bất biến vi phạm (nếu có).
-        ok: Được quyết định bởi actual_allow/matrix_expected/invariant_verdict trong reconcile()
+        invariant_verdict: Luật bất biến vi phạm (ALLOW/DENY/None).
+        invariant_description: Mô tả luật bất biến.
+        ok: Được quyết định bởi actual_allow/matrix_expected/invariant_verdict trong reconcile().
     """
     def __init__(self, username: str, roles: list[str], group: str, method: str, path: str, 
                  status: int, actual_allow: bool, matrix_expected: bool, 
-                 invariant_verdict: str | None, ok: bool):
+                 invariant_verdict: str | None, invariant_description: str | None, ok: bool):
         self.username = username
         self.roles = roles
         self.group = group
@@ -68,4 +69,5 @@ class ProbeResult:
         self.actual_allow = actual_allow
         self.matrix_expected = matrix_expected
         self.invariant_verdict = invariant_verdict
+        self.invariant_description = invariant_description
         self.ok = ok

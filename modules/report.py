@@ -18,7 +18,7 @@ def render_table(results: list[ProbeResult]):
     table.add_column("USER / GROUP")
     for group in groups: table.add_column(group, justify="center")
 
-    
+
     for user in users:
         row_data = [user]
         for group in groups:
@@ -71,7 +71,7 @@ def write_junit(results: list[ProbeResult], path: str):
         if not r.ok:
             if r.invariant_verdict:
                 ET.SubElement(testcase, "failure", message="Oracle Invariant Violation", type="OracleInvariantError"
-                ).text = f"Vi phạm luật bất biến: {r.invariant_verdict}"
+                ).text = f"Vi phạm luật bất biến: {r.invariant_description}"
             else:
                 ET.SubElement(testcase, "failure", message="RPAC Matrix Mismatch", type="MatrixMismatchError"
                 ).text = f"Ma trận yêu cầu: {r.matrix_expected} / Hệ thống trả về: {r.actual_allow}"
