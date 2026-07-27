@@ -1,11 +1,10 @@
 from __future__ import annotations
-import re
+import re, copy
 from modules.types import Probe, ProbeResult
 from modules import matrix as matrix_mod, oracle
 
 REQUEST_PATH = "/api/request"
 TIMEOUT = 15
-HOST_ID_TOKEN = "{host_id}"
 WRITE_VERB = {
     "agents": "DELETE",
     "ruleset": "PUT",
@@ -21,15 +20,22 @@ WRITE_VERB = {
     "agents-summary": None,
 }
 DEFAULT_WRITE_VERB = "POST"
-MANDATORY_PROBES = {
-    "rbac": [
-        ("POST", "/security/users", {}),
-        ("GET",  "/security/users", {}),
-        ("POST", "/security/roles", {}),
-    ],
-}
+MANDATORY_PROBES_KEYS = [
+    ("rbac", "POST", "/security/users"),
+    ("rbac", "GET",  "/security/users"),
+    ("rbac", "POST", "/security/roles"),
+]
+
 RISK_ORDER = ["read", "change", "high", "exec"]
 AR_PREFERRED = {"read": "ping", "change": "unisolate", "high": "isolate", "exec": "run-command"}
+KNOWN_BODY = {
+    ("agents", "POST", "/agents"): {"name": "qa_probe_agent", "ip": "10.0.0.99"},
+    ("groups", "POST", "/groups"): {"group_id": "qa_probe_group"},
+    ("active-response", "PUT", "/active-response"): {"command": "restart"},
+    ("rbac", "POST", "/security/users"): {"username": "qa_probe_user", "password": "Probe.Passw0rd!"},
+    ("rbac", "POST", "/security/roles"): {"name": "qa_probe_role"},
+    ("ar-command", "POST", "/agents/000/ar/run-command"): {"command": "!custom", "arguments": ["-"]},
+}
 
 def generate_test_cases(matrix) -> list[Probe]:
     """
@@ -57,14 +63,13 @@ def generate_test_cases(matrix) -> list[Probe]:
         else:
             verb = WRITE_VERB.get(group, DEFAULT_WRITE_VERB)
             for path in paths:
-                _add(Probe(group, "GET", path, {}))
+                _add(Probe(group, "GET", path, _body_for(group, "GET", path)))
                 if verb:
-                    _add(Probe(group, verb, path, {}))
+                    _add(Probe(group, verb, path, _body_for(group, "GET", path)))
 
-    for group, entries in MANDATORY_PROBES.items():
-        for method, path, body in entries:
-            _add(Probe(group, method, path, body))
-
+        for group, method, path in MANDATORY_PROBES_KEYS:
+            _add(Probe(group, method, path, _body_for(group, method, path)))
+    
     return probes
 
 def _group_paths(group, paths) -> list[str]:
@@ -82,7 +87,7 @@ def _group_paths(group, paths) -> list[str]:
     return out or [f"/{group}"]
 
 def _ar_probes(paths, ar) -> list[Probe]:
-    """Probe cho ar-command: đọc mọi path, ghi trên path xoá task, dispatch theo mức rủi ro."""
+    """Probe cho ar-command: đọc mọi path, ghi trên path task, dispatch theo mức rủi ro."""
     probes, dispatch_base = [], None
     for path in paths:
         probes.append(Probe("ar-command", "GET", path, {}))
@@ -100,26 +105,22 @@ def _ar_probes(paths, ar) -> list[Probe]:
         actions = by_risk[risk]
         action = AR_PREFERRED.get(risk)
         probes.append(Probe("ar-command", "POST",
-                            f"{dispatch_base}/{action if action in actions else actions[0]}", {}))
+                            f"{dispatch_base}/{action if action in actions else actions[0]}", _body_for("ar-command", "POST", f"{dispatch_base}/{action if action in actions else actions[0]}")))
     return probes
+
+def _body_for(group: str, method: str, path: str) -> dict:
+    """Tra body thật theo (group, method, path); không có → trả DEFAULT_BODY (rỗng)."""
+    return copy.deepcopy(KNOWN_BODY.get((group, method, path), {}))
 
 def build_payload(host_id: str, probe) -> dict:
     """
     Đóng gói request body gửi đến API proxy. Quét và thay thế các biến giữ chỗ bằng dữ liệu thật."""
+    body = dict(probe.body or {})
+    body.setdefault("idHost", host_id)
     return {"method": probe.method,
             "path": probe.path,
-            "body": _resolve_tokens(probe.body or {}, host_id),
+            "body": body,
             "id": host_id}
-
-def _resolve_tokens(value, host_id):
-    """Thay thế giá trị giả bằng dữ liệu thật được lấy về từ hệ thống."""
-    if isinstance(value, str):
-        return host_id if value == HOST_ID_TOKEN else value
-    if isinstance(value, dict):
-        return {k: _resolve_tokens(v, host_id) for k, v in value.items()}
-    if isinstance(value, list):
-        return [_resolve_tokens(v, host_id) for v in value]
-    return value
 
 def run_probe(session, host_id: str, probe) -> int:
     """
@@ -187,10 +188,10 @@ def judge_results(results, matrix_data, invariants_data) -> list[ProbeResult]:
         r.matrix_expected = matrix_mod.expected_allow(matrix_data, tier, r.group, r.method, action)
 
         r.invariant_verdict, rule_name = oracle.check_invariants(invariants_data, tier, r.method, r.path)
-        oracle.reconcile(r)
+        
+        r.ok = oracle.reconcile(r.actual_allow, r.matrix_expected, r.invariant_verdict)
         if not r.ok and r.invariant_verdict is not None:
-            r.invariant_verdict += f" {rule_name}"
-
+            r.invariant_description= rule_name
     return results
 
 def execute_probes(session, matrix_data, test_cases) -> list[ProbeResult]:
@@ -207,7 +208,7 @@ def execute_probes(session, matrix_data, test_cases) -> list[ProbeResult]:
         except Exception as e:
             print(f"[!] {probe.method} {probe.path}: transport error: {e}")
             continue
-            
+        
         results.append(ProbeResult(
             username=session.username,
             roles=session.roles,
@@ -218,6 +219,7 @@ def execute_probes(session, matrix_data, test_cases) -> list[ProbeResult]:
             actual_allow=(status != 403),
             matrix_expected=None,
             invariant_verdict=None,
+            invariant_description = None,
             ok=None,
         ))
 
