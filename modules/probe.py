@@ -186,12 +186,8 @@ def judge_results(results, matrix_data, invariants_data) -> list[ProbeResult]:
 
         action = _ar_action(r.path, r.method) if r.group == "ar-command" else None
         r.matrix_expected = matrix_mod.expected_allow(matrix_data, tier, r.group, r.method, action)
-
-        r.invariant_verdict, rule_name = oracle.check_invariants(invariants_data, tier, r.method, r.path)
-        
+        r.invariant_verdict, r.invariant_description = oracle.check_invariants(invariants_data, tier, r.method, r.path)
         r.ok = oracle.reconcile(r.actual_allow, r.matrix_expected, r.invariant_verdict)
-        if not r.ok and r.invariant_verdict is not None:
-            r.invariant_description= rule_name
     return results
 
 def execute_probes(session, matrix_data, test_cases) -> list[ProbeResult]:
