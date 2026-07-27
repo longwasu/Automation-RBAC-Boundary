@@ -5,6 +5,7 @@ from modules import matrix as matrix_mod, oracle
 
 REQUEST_PATH = "/api/request"
 TIMEOUT = 15
+# Phương thức đại diện cho mỗi nhóm.
 WRITE_VERB = {
     "agents": "DELETE",
     "ruleset": "PUT",
@@ -20,6 +21,7 @@ WRITE_VERB = {
     "agents-summary": None,
 }
 DEFAULT_WRITE_VERB = "POST"
+# Nhóm rbac — kiểm tra leo thang quyền.
 MANDATORY_PROBES_KEYS = [
     ("rbac", "POST", "/security/users"),
     ("rbac", "GET",  "/security/users"),
@@ -27,6 +29,7 @@ MANDATORY_PROBES_KEYS = [
 ]
 RISK_ORDER = ["read", "change", "high", "exec"]
 AR_PREFERRED = {"read": "ping", "change": "unisolate", "high": "isolate", "exec": "run-command"}
+# Mẫu body cho những endpoint cần payload hợp lệ.
 KNOWN_BODY = {
     ("agents", "POST", "/agents"): {"name": "qa_probe_agent", "ip": "10.0.0.99"},
     ("groups", "POST", "/groups"): {"group_id": "qa_probe_group"},
@@ -38,13 +41,12 @@ KNOWN_BODY = {
 
 def generate_test_cases(matrix) -> list[Probe]:
     """
-    Chuyển đổi dữ liệu ma trận quyền (matrix) thành danh sách các kịch bản test (Probe).
-    Duyệt qua từng group, sinh ra request GET. Nếu group cho phép ghi, sinh thêm request POST/PUT/DELETE. Gọi thêm xử lý riêng cho ar-command.
+    Chuyển ma trận quyền thành danh sách Probe: mỗi path một GET, cộng một
+    request ghi nếu nhóm cho phép. Nhóm ar-command xử lý riêng.
     """
     raw = getattr(matrix, "raw_data", matrix)
     probes = []
     seen = set()
-
     def _add(p):
         key = (p.group, p.method, p.path)
         if key not in seen:
@@ -56,6 +58,7 @@ def generate_test_cases(matrix) -> list[Probe]:
         if not group:
             continue
         paths = _group_paths(group, entry.get("paths", ""))
+
         if group == "ar-command":
             for p in _ar_probes(paths, raw.get("ar", {}) or {}):
                 _add(p)
@@ -70,7 +73,7 @@ def generate_test_cases(matrix) -> list[Probe]:
     return probes
 
 def _group_paths(group, paths) -> list[str]:
-    """Trích xuất mọi đường dẫn trong matrix liệt kê cho nhóm, chuyển chúng thành dạng gọi được."""
+    """Chuẩn hoá chuỗi paths của ma trận thành các đường dẫn gọi được."""
     out = []
     for raw in (paths or "").split(","):
         path = raw.strip()
@@ -103,11 +106,13 @@ def _ar_probes(paths, ar) -> list[Probe]:
     for action, risk in (ar.get("actionRisk", {}) or {}).items():
         by_risk.setdefault(risk, []).append(action)
     known = [r for r in RISK_ORDER if r in by_risk]
+    
     for risk in known + [r for r in by_risk if r not in RISK_ORDER]:
         actions = by_risk[risk]
         action = AR_PREFERRED.get(risk)
-        probes.append(Probe("ar-command", "POST",
-                            f"{dispatch_base}/{action if action in actions else actions[0]}", _body_for("ar-command", "POST", f"{dispatch_base}/{action if action in actions else actions[0]}")))
+        action_name = action if action in actions else actions[0]
+        target_path = f"{dispatch_base}/{action_name}"
+        probes.append(Probe("ar-command", "POST", target_path, _body_for("ar-command", "POST", target_path)))
     return probes
 
 def _body_for(group: str, method: str, path: str) -> dict:
@@ -116,19 +121,14 @@ def _body_for(group: str, method: str, path: str) -> dict:
 
 def build_payload(host_id: str, probe) -> dict:
     """
-    Đóng gói request body gửi đến API proxy."""
-    body = dict(probe.body or {})
-    body.setdefault("idHost", host_id)
+    Đóng gói request body gửi đến /api/request."""
     return {"method": probe.method,
             "path": probe.path,
-            "body": body,
+            "body": dict(probe.body or {}),
             "id": host_id}
 
 def run_probe(session, host_id: str, probe) -> int:
-    """
-    Thực thi kịch bản (Probe) lên server.
-    Dùng Requests gửi HTTP POST lên proxy API kèm theo payload. Nhận về mã trạng thái HTTP (status_code).
-    """
+    """ Gửi một probe qua /api/request, trả về HTTP status code."""
     http = session.session
     base = getattr(http, "base_url", "")
     if not base:
@@ -174,13 +174,11 @@ def judge_results(results, matrix_data, invariants_data) -> list[ProbeResult]:
     """
     known = _matrix_roles(matrix_data)
     if not known:
-        print("[!] Ma trận không khai role nào, bỏ qua toàn bộ đối chiếu")
         return results
 
     for r in results:
         tier = _tier_role(r.roles, known)
         if tier is None:
-            print(f"[!] {r.username}: không xác định được tier role trong {r.roles}")
             r.invariant_verdict = "SKIPPED"
             continue
 
@@ -218,7 +216,6 @@ def execute_probes(session, matrix_data, test_cases) -> list[ProbeResult]:
             invariant_description = None,
             ok=None,
         ))
-
     invariants_data = oracle.load_invariants()    
     if invariants_data is not None:
         judge_results(results, matrix_data, invariants_data)
