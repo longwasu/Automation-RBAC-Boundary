@@ -41,19 +41,19 @@ def reconcile(probe_result: ProbeResult) -> ProbeResult:
     
     if verdict == "DENY":
         if actual is True:
-            probe_result.ok = False
+            return False
             
         if expected is True:
-            probe_result.ok = False
+            return False
             
     elif verdict == "ALLOW":
         if actual is False:
-            probe_result.ok = False
+            return False
             
         if expected is False:
-            probe_result.ok = False
+            return False
             
     if actual != expected:
-        probe_result.ok = False
-        
-    return probe_result
+        return False
+
+    return True
