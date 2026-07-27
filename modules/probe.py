@@ -63,12 +63,12 @@ def generate_test_cases(matrix) -> list[Probe]:
         else:
             verb = WRITE_VERB.get(group, DEFAULT_WRITE_VERB)
             for path in paths:
-                _add(Probe(group, "GET", path, _body_for(group, "GET", path)))
+                _add(Probe(group, "GET", path, _body_for(group, verb, path)))
                 if verb:
                     _add(Probe(group, verb, path, _body_for(group, "GET", path)))
 
-        for group, method, path in MANDATORY_PROBES_KEYS:
-            _add(Probe(group, method, path, _body_for(group, method, path)))
+    for group, method, path in MANDATORY_PROBES_KEYS:
+        _add(Probe(group, method, path, _body_for(group, method, path)))
     
     return probes
 
