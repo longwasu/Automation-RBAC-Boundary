@@ -5,6 +5,9 @@ import xml.etree.ElementTree as ET
 
 
 def render_table(results: list[ProbeResult]):
+    """
+        Vẽ bảng kết quả test RPAC ra console
+    """
     if not results:
         print("[*] Không có dữ liệu để hiển thị.")
         return
@@ -22,7 +25,7 @@ def render_table(results: list[ProbeResult]):
         row_data = [user]
         for group in groups:
             cell_results = [r for r in results if r.username == user and r.group == group]
-        
+
             if not cell_results: 
                 row_data.append("-")
                 continue
@@ -80,5 +83,4 @@ def write_junit(results: list[ProbeResult], path: str):
     with open(path, "wb") as f:
         tree.write(f, encoding="utf-8", xml_declaration=True)
         print(f"[*] Kết quả kiểm thử đã được xuất ra file {path}")
-
 
