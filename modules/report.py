@@ -18,7 +18,6 @@ def render_table(results: list[ProbeResult]):
     table.add_column("USER / GROUP")
     for group in groups: table.add_column(group, justify="center")
 
-
     for user in users:
         row_data = [user]
         for group in groups:
