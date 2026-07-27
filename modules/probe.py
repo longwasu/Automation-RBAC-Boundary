@@ -25,7 +25,6 @@ MANDATORY_PROBES_KEYS = [
     ("rbac", "GET",  "/security/users"),
     ("rbac", "POST", "/security/roles"),
 ]
-
 RISK_ORDER = ["read", "change", "high", "exec"]
 AR_PREFERRED = {"read": "ping", "change": "unisolate", "high": "isolate", "exec": "run-command"}
 KNOWN_BODY = {
@@ -63,17 +62,15 @@ def generate_test_cases(matrix) -> list[Probe]:
         else:
             verb = WRITE_VERB.get(group, DEFAULT_WRITE_VERB)
             for path in paths:
-                _add(Probe(group, "GET", path, _body_for(group, verb, path)))
+                _add(Probe(group, "GET", path, _body_for(group, "GET", path)))
                 if verb:
-                    _add(Probe(group, verb, path, _body_for(group, "GET", path)))
-
+                    _add(Probe(group, verb, path, _body_for(group, verb, path)))
     for group, method, path in MANDATORY_PROBES_KEYS:
         _add(Probe(group, method, path, _body_for(group, method, path)))
-    
     return probes
 
 def _group_paths(group, paths) -> list[str]:
-    """Trích xuất mọi đường dẫn trong matrix liệt kê cho nhóm, chuyển thành chúng thành dạng gọi được."""
+    """Trích xuất mọi đường dẫn trong matrix liệt kê cho nhóm, chuyển chúng thành dạng gọi được."""
     out = []
     for raw in (paths or "").split(","):
         path = raw.strip()
@@ -87,7 +84,12 @@ def _group_paths(group, paths) -> list[str]:
     return out or [f"/{group}"]
 
 def _ar_probes(paths, ar) -> list[Probe]:
-    """Probe cho ar-command: đọc mọi path, ghi trên path task, dispatch theo mức rủi ro."""
+    """
+    Sinh các kịch bản test (Probe) chuyên biệt cho nhóm `ar-command`:
+    1. Đọc (GET): Áp dụng cho mọi đường dẫn.
+    2. Xóa (DELETE): Send request vào đường dẫn gốc để test quyền xóa task.
+    3. Thực thi (POST): chọn 1 lệnh đại diện từ AR_PREFERRED trích trong file matrix cho mỗi mức để test.
+    """
     probes, dispatch_base = [], None
     for path in paths:
         probes.append(Probe("ar-command", "GET", path, {}))
@@ -109,12 +111,12 @@ def _ar_probes(paths, ar) -> list[Probe]:
     return probes
 
 def _body_for(group: str, method: str, path: str) -> dict:
-    """Tra body thật theo (group, method, path); không có → trả DEFAULT_BODY (rỗng)."""
+    """Tra định dạng các trường giá trị body theo nhóm (group, method, path); không có sẽ trả kết quả body rỗng."""
     return copy.deepcopy(KNOWN_BODY.get((group, method, path), {}))
 
 def build_payload(host_id: str, probe) -> dict:
     """
-    Đóng gói request body gửi đến API proxy. Quét và thay thế các biến giữ chỗ bằng dữ liệu thật."""
+    Đóng gói request body gửi đến API proxy."""
     body = dict(probe.body or {})
     body.setdefault("idHost", host_id)
     return {"method": probe.method,
@@ -124,20 +126,19 @@ def build_payload(host_id: str, probe) -> dict:
 
 def run_probe(session, host_id: str, probe) -> int:
     """
-    Thực thi kịch bản (Probe) lên server thật.
-    Dùng Requests gửi HTTP POST lên proxy API kèm theo payload. Trả về mã trạng thái HTTP (status_code).
+    Thực thi kịch bản (Probe) lên server.
+    Dùng Requests gửi HTTP POST lên proxy API kèm theo payload. Nhận về mã trạng thái HTTP (status_code).
     """
     http = session.session
     base = getattr(http, "base_url", "")
     if not base:
         raise RuntimeError("session has no base_url (task-B must set http.base_url)")
-    
     r = http.post(f"{base}{REQUEST_PATH}",
                     json=build_payload(host_id, probe), timeout=TIMEOUT)
     return r.status_code
 
 def _matrix_roles(matrix_data) -> set[str]:
-    """Quét JSON ma trận để thu thập toàn bộ các role phân quyền (tier role).
+    """Quét JSON ma trận để thu thập toàn bộ các role phân quyền mà user sở hữu.
     Tạo tập tham chiếu chuẩn để lọc bỏ các role hạ tầng dư thừa của user."""
     raw = getattr(matrix_data, "raw_data", matrix_data) or {}
     ar = raw.get("ar", {}) or {}
@@ -148,7 +149,6 @@ def _matrix_roles(matrix_data) -> set[str]:
     if admin:
         roles.add(admin)
     return roles
-
 
 def _tier_role(roles, known) -> str | None:
     """Lọc ra đúng một role mà ma trận biết. None nếu không có hoặc có nhiều hơn một."""
@@ -169,7 +169,7 @@ def _ar_action(path: str, method: str) -> str | None:
     return None
 
 def judge_results(results, matrix_data, invariants_data) -> list[ProbeResult]:
-    """Duyệt qua các kết quả trả về (status response) và gọi module `matrix`, `oracle` để đối chiếu 
+    """Duyệt qua từng mã trạng thái mà server trả về và gọi module `matrix`, `oracle` để đối chiếu 
     xác định kết quả cuối cùng (Khớp / Lỗi / Vi phạm luật cứng) cho từng test case.
     """
     known = _matrix_roles(matrix_data)
@@ -191,12 +191,12 @@ def judge_results(results, matrix_data, invariants_data) -> list[ProbeResult]:
     return results
 
 def execute_probes(session, matrix_data, test_cases) -> list[ProbeResult]:
-    """Chạy mọi Probe với một phiên, trả về ProbeResult với actual_allow đã đo;
+    """Chạy mọi Probe kịch bản với phiên được truyền vào, trả về ProbeResult với actual_allow;
     matrix_expected/invariant_verdict/ok được gọi thẳng từ matrix và oracle để sử dụng làm cơ sở đưa ra kết quả cuối cùng."""
+
     host_id = getattr(session.session, "api_id", None)
     if not host_id:
         raise RuntimeError("session không có api_id")
-
     results = []
     for probe in test_cases:
         try:
