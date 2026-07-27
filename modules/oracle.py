@@ -6,9 +6,9 @@ def load_invariants():
         return yaml.safe_load(f)
 
 def check_invariants(invariants_data, role, method, path):
-    admin_role = invariants_data.get("admin_role")
+    admin_role = invariants_data.get('admin_role')
     if role == admin_role:
-        return "ALLOW"
+        return "ALLOW", "Admin có mọi quyền đọc/ghi"
 
     rules = invariants_data.get('rules', [])
 
@@ -29,9 +29,12 @@ def check_invariants(invariants_data, role, method, path):
         is_excluded = (role in exclude_roles)
 
         if is_target and not is_excluded:
-            return rule.get('effect')
+            effect = rule.get('effect')
+            rule_name = rule.get('descriptions')
 
-    return None
+            return effect, rule_name
+
+    return None, None
 
 def reconcile(probe_result: ProbeResult) -> ProbeResult:
     actual = probe_result.actual_allow
@@ -40,28 +43,21 @@ def reconcile(probe_result: ProbeResult) -> ProbeResult:
 
     probe_result.ok = True
     
-    log_prefix = f"[{probe_result.method} {probe_result.path} | Role: {probe_result.roles}]"
-    
     if verdict == "DENY":
         if actual is True:
-            print(f"[!] FATAL ERROR {log_prefix}")
             probe_result.ok = False
             
         if expected is True:
-            print(f"[!] CONFIG ERROR {log_prefix}")
             probe_result.ok = False
             
     elif verdict == "ALLOW":
         if actual is False:
-            print(f"[!] FATAL ERROR {log_prefix}")
             probe_result.ok = False
             
         if expected is False:
-            print(f"[!] CONFIG ERROR {log_prefix}")
             probe_result.ok = False
             
     if actual != expected:
-        print(f"[!] LOGIC ERROR {log_prefix}")
         probe_result.ok = False
         
     return probe_result
