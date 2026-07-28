@@ -8,7 +8,7 @@ HOSTS_APIS_PATH = "/hosts/apis"
 API_LOGIN_PATH = "/api/login"
 AUTHINFO_PATH = "/api/v1/auth/authinfo"
 BROWSER_HEADERS = {
-    "osd-xsrf": "kibana",
+    "osd-xsrf": "true",
     "Accept": "application/json, text/plain, */*",
     "Content-Type": "application/json",
 }
@@ -22,7 +22,7 @@ class AuthError(RuntimeError):
     """Không dựng được một phiên dùng được."""
 
 def _new_http(base, verify_tls):
-    """Khởi tạo cấu hình mạng: Tạo đối tượng requests.Session với các header giả lập trình duyệt, URL gốc và thiết lập TLS."""
+    """Khởi tạo đối tượng requests.Session với các header giả lập trình duyệt, URL gốc và thiết lập TLS."""
     http = requests.Session()
     http.verify = verify_tls
     http.headers.update(BROWSER_HEADERS)
@@ -48,7 +48,7 @@ def set_nst_cookies(http, username=None, api_id=None, token=None):
         http.cookies.set(NST_TOKEN_COOKIE, token)
 
 def login(base_url, username, password, verify_tls=False, roles=None):
-    """Gửi request đăng nhập bằng tài khoản/mật khẩu để lấy cookie cốt lõi và trả về đối tượng Session."""
+    """Gửi request đăng nhập bằng tài khoản/mật khẩu để lấy cookie thiết yếu và trả về đối tượng Session."""
     base = base_url.rstrip("/")
     http = _new_http(base, verify_tls)
     try:
@@ -109,7 +109,7 @@ def fetch_nst_token(session, api_id, force=False):
     return token
 
 def login_all_users(config_path: str) -> list[Session]:
-    """Đọc cấu hình và chạy luồng đăng nhập cho toàn bộ tài khoản, in kết quả kiểm tra."""
+    """Đọc cấu hình và chạy luồng đăng nhập cho toàn bộ tài khoản, in kết quả kiểm tra khi gặp trường hợp login failed."""
     try:
         base_url, verify_tls, users = _read_config(config_path)
     except AuthError as e:
@@ -142,7 +142,7 @@ def login_all_users(config_path: str) -> list[Session]:
         set_nst_cookies(s.session, api_id=api_id)
         s.session.api_id = api_id
         if fetch_nst_token(s, api_id) is None:
-            print(f"[ERR] {s.username}: không lấy được nst-token, bỏ tài khoản này")
+            print(f"[ERR] {s.username}: không lấy được nst-token")
             continue
         ready.append(s)
     return ready
