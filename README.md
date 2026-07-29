@@ -73,7 +73,7 @@ python rbac_matrix.py
 docker load -i <tên file.tar>
 
 # 3. Chạy docker image
-docker run --rm <tên docker image>
+docker run -it --rm <tên docker image>
 ```
 
 ## 📊 Đọc kết quả báo cáo
